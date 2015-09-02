@@ -89,10 +89,11 @@ func main() {
 		}
 		doUpload(args)
 	case "sync":
-		if len(args) == 0 {
-			args = []string{"cfs-sync"}
+		if len(args) != 3 {
+			fmt.Println("invalid argument number")
+			showHelp()
 		}
-		doUpload(args)
+		doSync(args[0], args[1], args[2])
 	default:
 		fmt.Printf("unknown subcommand '%s'\n", subcommand)
 		showHelp()
@@ -105,7 +106,7 @@ func doUpload(files []string) {
 	// u, _ := cfs.CreateS3Uploader("cfs-dev")
 	u, _ := cfs.CreateFileUploader("/tmp/cfstmp")
 
-	bucket, err := cfs.NewBucket(*optFile, u)
+	bucket, err := cfs.BucketFromFile(*optFile, u)
 	if err != nil {
 		panic(err)
 	}
@@ -122,5 +123,16 @@ func doUpload(files []string) {
 	}
 }
 
-func doSync() {
+func doSync(baseUrl string, location string, dir string) {
+
+	bucket, err := cfs.BucketFromUrl(baseUrl, location)
+	if err != nil {
+		panic(err)
+	}
+
+	err = bucket.Sync(dir)
+	if err != nil {
+		panic(err)
+	}
+
 }

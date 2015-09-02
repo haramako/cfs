@@ -4,7 +4,9 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -23,6 +25,8 @@ type Bucket struct {
 	Contents    map[string]Content
 	uploader    Uploader
 	changed     bool
+	url         string
+	location    string
 }
 
 type Content struct {
@@ -33,7 +37,12 @@ type Content struct {
 	Touched bool
 }
 
-func NewBucket(path string, uploader Uploader) (*Bucket, error) {
+type Uploader interface {
+	Upload(path string, body []byte, overwrite bool) error
+	Close()
+}
+
+func BucketFromFile(path string, uploader Uploader) (*Bucket, error) {
 	b := &Bucket{
 		Path:     path,
 		Contents: make(map[string]Content),
@@ -44,7 +53,7 @@ func NewBucket(path string, uploader Uploader) (*Bucket, error) {
 		if Verbose {
 			fmt.Printf("read bucket from '%s'\n", b.Path)
 		}
-		err := b.Parse(string(data))
+		err := b.Parse(data)
 		if err != nil {
 			return nil, err
 		}
@@ -52,8 +61,28 @@ func NewBucket(path string, uploader Uploader) (*Bucket, error) {
 	return b, nil
 }
 
-func (b *Bucket) Parse(s string) error {
-	for _, line := range strings.Split(s, "\n") {
+func BucketFromUrl(url string, location string) (*Bucket, error) {
+	b := &Bucket{
+		Contents: make(map[string]Content),
+		url:      url,
+		location: location,
+	}
+
+	body, err := fetch(path.Join(url, location))
+	if err != nil {
+		return nil, err
+	}
+
+	err = b.Parse(body)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+func (b *Bucket) Parse(s []byte) error {
+	for _, line := range strings.Split(string(s), "\n") {
 		if len(s) != 0 {
 			col := strings.Split(line, "\t")
 			if len(col) >= 3 {
@@ -102,24 +131,30 @@ func (b *Bucket) Finish() error {
 	dump := []byte(b.Dump())
 	b.Hash = fmt.Sprintf("%x", sha1.Sum(dump))
 
-	err := b.uploader.Upload("data/"+b.Hash, dump, false)
+	if b.uploader != nil {
+		err := b.uploader.Upload("data/"+b.Hash, dump, false)
+		if err != nil {
+			return err
+		}
+
+		if b.changed && b.Tag != "" {
+			err = b.uploader.Upload("tags/"+b.Tag, dump, true)
+			if err != nil {
+				return err
+			}
+
+			err = b.uploader.Upload("versions/"+b.Tag+time.Now().Format("-2006-01-02-150405"), dump, true)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err := ioutil.WriteFile(b.Path, dump, 0666)
 	if err != nil {
 		return err
 	}
 
-	if b.changed && b.Tag != "" {
-		err = b.uploader.Upload("tags/"+b.Tag, dump, true)
-		if err != nil {
-			return err
-		}
-
-		err = b.uploader.Upload("versions/"+b.Tag+time.Now().Format("-2006-01-02-150405"), dump, true)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = ioutil.WriteFile(b.Path, dump, 0666)
 	ioutil.WriteFile(b.Path+".hash", []byte(b.Hash), 0666)
 	if Verbose {
 		fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
@@ -156,7 +191,9 @@ func (b *Bucket) AddFile(path string, info os.FileInfo) bool {
 	if Verbose {
 		fmt.Printf("changed file %-12s (%s)\n", path, hash)
 	}
-	b.uploader.Upload("data/"+hash, data, false)
+	if b.uploader != nil {
+		b.uploader.Upload("data/"+hash, data, false)
+	}
 
 	b.Contents[path] = Content{Path: path, Hash: hash, Time: info.ModTime(), Size: len(data), Touched: true}
 	b.changed = true
@@ -175,14 +212,62 @@ func (b *Bucket) AddFiles(path string) {
 			}
 			return nil
 		}
-		if !info.Mode().IsDir() {
+
+		if path != "." {
 			for _, pat := range ExcludePetterns {
 				if match, err := filepath.Match(pat, path); match || err != nil {
-					return nil
+					if info.Mode().IsDir() {
+						return filepath.SkipDir
+					} else {
+						return nil
+					}
 				}
 			}
+		}
+
+		if !info.Mode().IsDir() {
 			b.AddFile(path, info)
 		}
 		return nil
 	})
+}
+
+func (b *Bucket) Sync(dir string) error {
+	for _, c := range b.Contents {
+		data, err := fetch(path.Join(b.url, "data", c.Hash))
+		if err != nil {
+			return err
+		}
+
+		err = os.MkdirAll(path.Join(dir), 0777)
+		if err != nil {
+			return err
+		}
+
+		err = ioutil.WriteFile(path.Join(dir, c.Path), data, 0666)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fetch(url string) ([]byte, error) {
+	t := &http.Transport{}
+	t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
+	c := &http.Client{Transport: t}
+
+	res, err := c.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	contents, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return contents, nil
 }
