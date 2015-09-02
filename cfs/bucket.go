@@ -197,7 +197,10 @@ func (b *Bucket) AddFile(path string, info os.FileInfo) bool {
 		fmt.Printf("changed file %-12s (%s)\n", path, hash)
 	}
 	if b.uploader != nil {
-		b.uploader.Upload("data/"+hash, data, false)
+		err := b.uploader.Upload("data/"+hash, data, false)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	b.Contents[path] = Content{Path: path, Hash: hash, Time: info.ModTime(), Size: len(data), Touched: true}

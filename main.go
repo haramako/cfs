@@ -5,48 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/haramako/cfs/cfs"
-	// "github.com/davecgh/go-spew/spew"
 	"os"
 )
-
-/*
-type SftpUploader struct {
-	rootPath string
-	conn     *sftp.Client
-}
-
-func CreateSftpUploader(info string) (*SftpUploader, error) {
-	config := &ssh.ClientConfig{
-		User:            "makoto",
-		HostKeyCallback: nil,
-		Auth: []ssh.AuthMethod{
-			ssh.Password("7teen'sMap"),
-		},
-	}
-	config.SetDefaults()
-	sshConn, err := ssh.Dial("tcp", "localhost:22", config)
-	if err != nil {
-		return nil, err
-	}
-	u := new(SftpUploader)
-	sftpConn, err := sftp.NewClient(sshConn)
-	if err != nil {
-		return nil, err
-	}
-	rootPath = "/Users/makoto"
-	u.conn = sftpConn
-	return u, nil
-}
-
-func (u *EmptyUploader) Upload(path string, body []byte) error {
-	u.conn.Create(path
-	return nil
-}
-
-func (u *EmptyUploader) Close() {
-	u.conn.Close()
-}
-*/
 
 // エントリーポイント
 

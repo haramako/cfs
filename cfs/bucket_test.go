@@ -37,13 +37,26 @@ func setupBucket() (*Bucket, string) {
 	}
 
 	var uploader Uploader
-	if os.Getenv("CFS_TEST_UPLOADER") == "s3" {
+	switch os.Getenv("CFS_TEST_UPLOADER") {
+	case "s3":
+		if Verbose {
+			fmt.Println("using s3 uploder")
+		}
 		uploader, err = CreateS3Uploader("cfs-dev")
-		uploader.(*S3Uploader).base = fmt.Sprintf("test/%d/", rand.Int())
 		if err != nil {
 			panic(err)
 		}
-	} else {
+		uploader.(*S3Uploader).base = fmt.Sprintf("test/%d/", rand.Int())
+	case "sftp":
+		if Verbose {
+			fmt.Println("using sftp uploder")
+		}
+		uploader, err = CreateSftpUploader("cfs-dev")
+		if err != nil {
+			panic(err)
+		}
+		uploader.(*SftpUploader).rootPath = fmt.Sprintf("cfs-test/%d", rand.Int())
+	default:
 		uploader, err = CreateFileUploader(tempDir)
 	}
 
