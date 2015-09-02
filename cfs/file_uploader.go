@@ -9,6 +9,7 @@ import (
 
 type FileUploader struct {
 	Root string
+	stat UploaderStat
 }
 
 func CreateFileUploader(root string) (Uploader, error) {
@@ -31,6 +32,7 @@ func (u *FileUploader) Upload(_path string, body []byte, overwrite bool) error {
 		return err
 	}
 
+	u.stat.UploadCount++
 	err = ioutil.WriteFile(fullpath, body, 0666)
 	if err != nil {
 		return err
@@ -44,4 +46,8 @@ func (u *FileUploader) Upload(_path string, body []byte, overwrite bool) error {
 }
 
 func (u *FileUploader) Close() {
+}
+
+func (u *FileUploader) Stat() *UploaderStat {
+	return &u.stat
 }

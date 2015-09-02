@@ -8,20 +8,37 @@ import (
 
 type S3Uploader struct {
 	bucket *s3.Bucket
+	base   string
+	stat   UploaderStat
+}
+
+type S3UploderOption struct {
+	BucketName      *string
+	AccessKeyId     *string
+	SecretAccessKey *string
+	Regin           *string
+}
+
+func NewS3() (*s3.S3, error) {
+	auth, err := aws.EnvAuth()
+	if err != nil {
+		return nil, err
+	}
+	s := s3.New(auth, aws.GetRegion("ap-northeast-1"))
+	return s, nil
 }
 
 func CreateS3Uploader(bucketName string) (*S3Uploader, error) {
-	auth, err := aws.EnvAuth()
+	s, err := NewS3()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	s := s3.New(auth, aws.GetRegion("ap-northeast-1"))
 	return &S3Uploader{bucket: s.Bucket(bucketName)}, nil
 }
 
 func (u *S3Uploader) Upload(path string, body []byte, overwrite bool) error {
 	if !overwrite {
-		found, err := u.bucket.Exists(path)
+		found, err := u.bucket.Exists(u.base + path)
 		if err != nil {
 			return err
 		}
@@ -29,7 +46,8 @@ func (u *S3Uploader) Upload(path string, body []byte, overwrite bool) error {
 			return nil
 		}
 	}
-	err := u.bucket.Put(path, body, "binary/octet-stream", s3.BucketOwnerFull, s3.Options{})
+	u.stat.UploadCount++
+	err := u.bucket.Put(u.base+path, body, "binary/octet-stream", s3.BucketOwnerFull, s3.Options{})
 	if err != nil {
 		return err
 	}
@@ -40,4 +58,8 @@ func (u *S3Uploader) Upload(path string, body []byte, overwrite bool) error {
 }
 
 func (u *S3Uploader) Close() {
+}
+
+func (u *S3Uploader) Stat() *UploaderStat {
+	return &u.stat
 }

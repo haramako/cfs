@@ -40,6 +40,11 @@ type Content struct {
 type Uploader interface {
 	Upload(path string, body []byte, overwrite bool) error
 	Close()
+	Stat() *UploaderStat
+}
+
+type UploaderStat struct {
+	UploadCount int
 }
 
 func BucketFromFile(path string, uploader Uploader) (*Bucket, error) {
