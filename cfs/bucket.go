@@ -1,6 +1,9 @@
 package cfs
 
 import (
+	"bytes"
+	"compress/zlib"
+	"crypto/md5"
 	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
@@ -14,7 +17,7 @@ import (
 	"time"
 )
 
-var ExcludePetterns = []string{".*", "*.vdat", "cfs"}
+var ExcludePetterns = []string{".*", "*.vdat", "cfs", "*.meta"}
 var Verbose = false
 
 type Bucket struct {
@@ -27,14 +30,17 @@ type Bucket struct {
 	changed     bool
 	url         string
 	location    string
+	HashType    string
 }
 
 type Content struct {
-	Path    string
-	Hash    string
-	Time    time.Time
-	Size    int
-	Touched bool
+	Path     string
+	Hash     string
+	Time     time.Time
+	Size     int
+	OrigHash string
+	OrigSize int
+	Touched  bool
 }
 
 type Uploader interface {
@@ -52,6 +58,7 @@ func BucketFromFile(path string, uploader Uploader) (*Bucket, error) {
 		Path:     path,
 		Contents: make(map[string]Content),
 		uploader: uploader,
+		HashType: "md5",
 	}
 	data, err := ioutil.ReadFile(path)
 	if err == nil {
@@ -66,16 +73,40 @@ func BucketFromFile(path string, uploader Uploader) (*Bucket, error) {
 	return b, nil
 }
 
+func BucketFromUrlOnly(url string) *Bucket {
+	b := &Bucket{
+		Contents: make(map[string]Content),
+		url:      url,
+		location: "",
+		HashType: "md5",
+	}
+	return b
+}
+
 func BucketFromUrl(url string, location string) (*Bucket, error) {
 	b := &Bucket{
 		Contents: make(map[string]Content),
 		url:      url,
 		location: location,
+		HashType: "md5",
 	}
 
-	body, err := fetch(path.Join(url, location))
-	if err != nil {
-		return nil, err
+	var body []byte
+	var err error
+	if strings.HasPrefix(location, "/data/") {
+		body, err = b.Fetch(location[len("/data/"):])
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		hash, err := fetch(url + location)
+		if err != nil {
+			return nil, err
+		}
+		body, err = b.Fetch(string(hash))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = b.Parse(body)
@@ -106,6 +137,17 @@ func (b *Bucket) Parse(s []byte) error {
 	return nil
 }
 
+func (b *Bucket) Sum(data []byte) string {
+	switch b.HashType {
+	case "sha1":
+		return fmt.Sprintf("%x", sha1.Sum(data))
+	case "md5":
+		return fmt.Sprintf("%x", md5.Sum(data))
+	default:
+		panic("invalid hash type")
+	}
+}
+
 func (b *Bucket) RemoveUntouched() {
 	newContents := make(map[string]Content)
 	for _, c := range b.Contents {
@@ -126,36 +168,40 @@ func (b *Bucket) Dump() string {
 	r := make([]string, 0)
 	for _, k := range keys {
 		c := b.Contents[k]
-		r = append(r, strings.Join([]string{c.Hash, c.Path, strconv.Itoa(c.Size), c.Time.Format(time.RFC3339)}, "\t"))
+		r = append(r, strings.Join([]string{
+			c.Hash, c.Path, strconv.Itoa(c.Size), c.Time.Format(time.RFC3339),
+			c.OrigHash, strconv.Itoa(c.OrigSize),
+		}, "\t"))
 	}
 
 	return strings.Join(r, "\n") + "\n"
 }
 
 func (b *Bucket) Finish() error {
-	dump := []byte(b.Dump())
-	b.Hash = fmt.Sprintf("%x", sha1.Sum(dump))
+	orig_data := []byte(b.Dump())
+	orig_hash := b.Sum(orig_data)
 
 	if b.uploader != nil {
-		err := b.uploader.Upload("data/"+b.Hash, dump, false)
+		hash, _, err := b.Upload(orig_data, orig_hash)
 		if err != nil {
 			return err
 		}
+		b.Hash = hash
 
 		if b.changed && b.Tag != "" {
-			err = b.uploader.Upload("tags/"+b.Tag, dump, true)
+			err := b.uploader.Upload("tags/"+b.Tag, []byte(hash), true)
 			if err != nil {
 				return err
 			}
 
-			err = b.uploader.Upload("versions/"+b.Tag+time.Now().Format("-2006-01-02-150405"), dump, true)
+			err = b.uploader.Upload("versions/"+b.Tag+time.Now().Format("-2006-01-02-150405"), []byte(hash), true)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	err := ioutil.WriteFile(b.Path, dump, 0666)
+	err := ioutil.WriteFile(b.Path, orig_data, 0666)
 	if err != nil {
 		return err
 	}
@@ -174,28 +220,18 @@ func (b *Bucket) Close() {
 	}
 }
 
-func (b *Bucket) AddFile(path string, info os.FileInfo) bool {
-	old, found := b.Contents[path]
-	if found {
-		b.Contents[path] = Content{Path: old.Path, Hash: old.Hash, Time: old.Time, Size: old.Size, Touched: true}
-		if !info.ModTime().After(old.Time) {
-			return false
-		}
+func (b *Bucket) Upload(orig_data []byte, orig_hash string) (string, int, error) {
+	data := orig_data
+	hash := orig_hash
+	if Option.Compress {
+		var buf bytes.Buffer
+		w := zlib.NewWriter(&buf)
+		w.Write(orig_data)
+		w.Close()
+		data = buf.Bytes()
+		hash = b.Sum(data)
 	}
 
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		panic(err)
-	}
-
-	hash := fmt.Sprintf("%x", sha1.Sum(data))
-	if found && old.Hash == hash {
-		return false
-	}
-
-	if Verbose {
-		fmt.Printf("changed file %-12s (%s)\n", path, hash)
-	}
 	if b.uploader != nil {
 		err := b.uploader.Upload("data/"+hash, data, false)
 		if err != nil {
@@ -203,27 +239,70 @@ func (b *Bucket) AddFile(path string, info os.FileInfo) bool {
 		}
 	}
 
-	b.Contents[path] = Content{Path: path, Hash: hash, Time: info.ModTime(), Size: len(data), Touched: true}
+	return hash, len(data), nil
+}
+
+func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
+	fullPath := path.Join(root, relative)
+	old, found := b.Contents[relative]
+	if found {
+		b.Contents[relative] = Content{
+			Path: old.Path, Hash: old.Hash, Time: old.Time, Size: old.Size,
+			OrigHash: old.OrigHash, OrigSize: old.OrigSize, Touched: true,
+		}
+		if !info.ModTime().After(old.Time) {
+			return false
+		}
+	}
+
+	orig_data, err := ioutil.ReadFile(fullPath)
+	if err != nil {
+		panic(err)
+	}
+
+	orig_hash := b.Sum(orig_data)
+	if found && old.OrigHash == orig_hash {
+		return false
+	}
+
+	if Verbose {
+		fmt.Printf("changed file %-12s (%s)\n", relative, orig_hash)
+	}
+
+	hash, size, err := b.Upload(orig_data, orig_hash)
+	if err != nil {
+		panic(err)
+	}
+
+	b.Contents[relative] = Content{
+		Path: relative, Hash: hash, Size: size,
+		OrigHash: orig_hash, OrigSize: len(orig_data), Time: info.ModTime(), Touched: true,
+	}
 	b.changed = true
 
 	return true
 }
 
-func (b *Bucket) AddFiles(path string) {
-	filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+func (b *Bucket) AddFiles(root string) {
+	filepath.Walk(root, func(path2 string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info == nil {
 			if Verbose {
-				fmt.Printf("%s not found\n", path)
+				fmt.Printf("%s not found\n", path2)
 			}
 			return nil
 		}
 
-		if path != "." {
+		// TODO: filepath.Matchがちゃんと働かないため、とりあえず対応
+		if filepath.Ext(path2) == ".meta" {
+			return nil
+		}
+
+		if path2 != "." {
 			for _, pat := range ExcludePetterns {
-				if match, err := filepath.Match(pat, path); match || err != nil {
+				if match, err := filepath.Match(pat, path2); match || err != nil {
 					if info.Mode().IsDir() {
 						return filepath.SkipDir
 					} else {
@@ -234,7 +313,15 @@ func (b *Bucket) AddFiles(path string) {
 		}
 
 		if !info.Mode().IsDir() {
-			b.AddFile(path, info)
+			if root == "." || root == path2 {
+				b.AddFile("", path2, info)
+			} else {
+				b.AddFile(root, path2[len(root)+1:], info)
+			}
+		} else {
+			if !Option.Recursive && root != path2 {
+				return filepath.SkipDir
+			}
 		}
 		return nil
 	})
@@ -242,12 +329,12 @@ func (b *Bucket) AddFiles(path string) {
 
 func (b *Bucket) Sync(dir string) error {
 	for _, c := range b.Contents {
-		data, err := fetch(path.Join(b.url, "data", c.Hash))
+		data, err := b.Fetch(c.Hash)
 		if err != nil {
 			return err
 		}
 
-		err = os.MkdirAll(path.Join(dir), 0777)
+		err = os.MkdirAll(path.Dir(path.Join(dir, c.Path)), 0777)
 		if err != nil {
 			return err
 		}
@@ -258,6 +345,26 @@ func (b *Bucket) Sync(dir string) error {
 		}
 	}
 	return nil
+}
+
+func (b *Bucket) Fetch(hash string) ([]byte, error) {
+	data, err := fetch(b.url + "/data/" + hash)
+	if err != nil {
+		return nil, err
+	}
+
+	if Option.Compress {
+		r, err := zlib.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		data, err = ioutil.ReadAll(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return data, nil
 }
 
 func fetch(url string) ([]byte, error) {

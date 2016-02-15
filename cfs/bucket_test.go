@@ -5,35 +5,34 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path"
+	"strings"
 	"testing"
 	"time"
 )
 
 var Printf = fmt.Printf // avoid error
-var tempDir string
+var tempDir = ""
 var timeCount = int64(0)
-var initialized = false
 
-func setupBucket() (*Bucket, string) {
-	if !initialized {
-		rand.Seed(time.Now().UnixNano())
-		initialized = true
-	}
+func TestMain(m *testing.M) {
+	rand.Seed(time.Now().UnixNano())
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true
 	}
+	var err error
+	tempDir, err = ioutil.TempDir("", "cfs-work")
+	if err != nil {
+		panic(err)
+	}
+}
+
+func setupBucket() (*Bucket, string) {
 
 	dir, err := ioutil.TempDir("", "cfs-test")
 	if err != nil {
 		panic(err)
-	}
-
-	if tempDir == "" {
-		tempDir, err = ioutil.TempDir("", "cfs-work")
-		if err != nil {
-			panic(err)
-		}
 	}
 
 	var uploader Uploader
@@ -51,16 +50,21 @@ func setupBucket() (*Bucket, string) {
 		if Verbose {
 			fmt.Println("using sftp uploder")
 		}
-		uploader, err = CreateSftpUploader("cfs-dev")
+		uploader, err = CreateSftpUploader(&SftpOption{
+			Host:     "localhost",
+			User:     "makoto",
+			RootPath: fmt.Sprintf("cfs-test/%d", rand.Int()),
+		})
 		if err != nil {
 			panic(err)
 		}
-		uploader.(*SftpUploader).rootPath = fmt.Sprintf("cfs-test/%d", rand.Int())
 	default:
-		uploader, err = CreateFileUploader(tempDir)
+		if uploader, err = CreateFileUploader(tempDir); err != nil {
+			panic(err)
+		}
 	}
 
-	bucket, err := BucketFromFile(dir, uploader)
+	bucket, err := BucketFromFile(dir+"/.bucket", uploader)
 	if err != nil {
 		panic(err)
 	}
@@ -80,6 +84,22 @@ func setupBucketWithFiles() (*Bucket, string) {
 		b.uploader.Stat().UploadCount = 0
 	}
 	return b, dir
+}
+
+func setupBucketFromUrl(location string) *Bucket {
+	switch os.Getenv("CFS_TEST_UPLOADER") {
+	case "s3":
+		// PENDING
+	case "sftp":
+		// PENDING
+	default:
+		bucket, err := BucketFromUrl("file://"+tempDir, location)
+		if err != nil {
+			panic(err)
+		}
+		return bucket
+	}
+	return nil
 }
 
 func assertContents(t *testing.T, b *Bucket, n int) {
@@ -167,4 +187,39 @@ func TestOverwriteFile(t *testing.T) {
 	assertContents(t, b, 3)
 	assertUploadCount(t, b, 3)
 
+}
+
+func TestCompress(t *testing.T) {
+	b, dir := setupBucket()
+
+	addFile(dir, "hoge", "piyo")
+	addFile(dir, "fuga", "hage")
+	addFile(dir, "piyo/piyo", "piyopiyo")
+	b.AddFiles(dir)
+
+	err := b.Finish()
+	if err != nil {
+		t.Errorf("cannot finish bucket")
+		t.Error(err)
+		return
+	}
+
+	b2 := setupBucketFromUrl("/data/" + b.Hash)
+
+	temp, err := ioutil.TempDir("", "cfs-sync")
+	if err != nil {
+		panic(err)
+	}
+
+	err = b2.Sync(temp)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	output, _ := exec.Command("diff", "-r", dir, temp).CombinedOutput()
+	if len(strings.Split(string(output), "\n")) != 3 {
+		t.Errorf("invalid diff")
+		t.Error(string(output))
+	}
 }

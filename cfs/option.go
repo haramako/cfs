@@ -10,11 +10,20 @@ type OptionInfo struct {
 	Tag        string          `json:"tag"`
 	Repository string          `json:"repository"`
 	Aws        S3UploderOption `json:"aws"`
+	Sftp       SftpOption      `json:"sftp"`
+	Recursive  bool            `json:"recursive"`
+	Flatten    bool            `json:"flatten"`
+	Compress   bool            `json:"compress"`
+	EncryptKey string          `json:"encryptKey"`
 }
 
-var Option = &OptionInfo{}
+var Option = &OptionInfo{
+	Recursive: true,
+	Compress:  true,
+	Flatten:   true,
+}
 
-func loadDefaultOptions() {
+func LoadDefaultOptions() {
 	data, err := ioutil.ReadFile(".cfsenv")
 	if err != nil {
 		return
