@@ -3,6 +3,8 @@ package cfs
 import (
 	"bytes"
 	"compress/zlib"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
 	"fmt"
@@ -223,12 +225,30 @@ func (b *Bucket) Close() {
 func (b *Bucket) Upload(orig_data []byte, orig_hash string) (string, int, error) {
 	data := orig_data
 	hash := orig_hash
+	hash_changed := false
+
 	if Option.Compress {
 		var buf bytes.Buffer
 		w := zlib.NewWriter(&buf)
 		w.Write(orig_data)
 		w.Close()
 		data = buf.Bytes()
+		hash_changed = true
+	}
+
+	if Option.EncryptKey != "" {
+		block, err := aes.NewCipher([]byte(Option.EncryptKey))
+		if err != nil {
+			panic(err)
+		}
+		cfb := cipher.NewCFBEncrypter(block, []byte(Option.EncryptIv))
+		cipher_data := make([]byte, len(data))
+		cfb.XORKeyStream(cipher_data, data)
+		data = cipher_data
+		hash_changed = true
+	}
+
+	if hash_changed {
 		hash = b.Sum(data)
 	}
 
@@ -351,6 +371,17 @@ func (b *Bucket) Fetch(hash string) ([]byte, error) {
 	data, err := fetch(b.url + "/data/" + hash)
 	if err != nil {
 		return nil, err
+	}
+
+	if Option.EncryptKey != "" {
+		block, err := aes.NewCipher([]byte(Option.EncryptKey))
+		if err != nil {
+			panic(err)
+		}
+		cfb := cipher.NewCFBDecrypter(block, []byte(Option.EncryptIv))
+		plain_data := make([]byte, len(data))
+		cfb.XORKeyStream(plain_data, data)
+		data = plain_data
 	}
 
 	if Option.Compress {

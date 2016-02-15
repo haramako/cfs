@@ -15,12 +15,15 @@ type OptionInfo struct {
 	Flatten    bool            `json:"flatten"`
 	Compress   bool            `json:"compress"`
 	EncryptKey string          `json:"encryptKey"`
+	EncryptIv  string          `json:"encryptIv"`
 }
 
 var Option = &OptionInfo{
-	Recursive: true,
-	Compress:  true,
-	Flatten:   true,
+	Recursive:  true,
+	Compress:   true,
+	Flatten:    true,
+	EncryptKey: "aiRue7ooouNee0IeooneeN2eel9Aifie",
+	EncryptIv:  "Yee9zoogoow3Geiz",
 }
 
 func LoadDefaultOptions() {
