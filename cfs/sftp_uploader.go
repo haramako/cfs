@@ -6,8 +6,11 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
+	"math/rand"
+	"os"
 	"os/user"
 	"path"
+	"strconv"
 )
 
 type SftpUploader struct {
@@ -164,7 +167,9 @@ func (u *SftpUploader) Upload(_path string, body []byte, overwrite bool) error {
 			return err
 		}
 	}
-	file, err := u.conn.Create(fullpath)
+
+	var temp_path = dir + strconv.Itoa(rand.Int()) + ".tmp"
+	file, err := u.conn.Create(temp_path)
 	if err != nil {
 		return fmt.Errorf("Cannot create remote file '%s'", fullpath)
 	}
@@ -172,6 +177,11 @@ func (u *SftpUploader) Upload(_path string, body []byte, overwrite bool) error {
 	_, err = file.Write(body)
 	if err != nil {
 		return err
+	}
+
+	err = os.Rename(temp_path, fullpath)
+	if err != nil {
+		return fmt.Errorf("cannot rename temp file %s to %s", temp_path, fullpath)
 	}
 
 	if Verbose {

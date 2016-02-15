@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs/cfs"
+	"math/rand"
 	"os"
+	"time"
 )
 
 // エントリーポイント
@@ -27,6 +29,7 @@ func showHelp() {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 
 	cfs.LoadDefaultOptions()
 
@@ -116,7 +119,7 @@ var SyncCommand = cli.Command{
 }
 
 func doSync(c *cli.Context) {
-	//	func doSync(baseUrl string, location string, dir string) {
+	cfs.Verbose = c.GlobalBool("V")
 
 	var args = c.Args()
 	if len(args) < 3 {
@@ -148,7 +151,7 @@ var FetchCommand = cli.Command{
 }
 
 func doFetch(c *cli.Context) {
-	//	func doSync(baseUrl string, location string, dir string) {
+	cfs.Verbose = c.GlobalBool("V")
 
 	var args = c.Args()
 	if len(args) < 2 {

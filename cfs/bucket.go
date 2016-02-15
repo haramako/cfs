@@ -349,6 +349,10 @@ func (b *Bucket) AddFiles(root string) {
 
 func (b *Bucket) Sync(dir string) error {
 	for _, c := range b.Contents {
+		if Verbose {
+			fmt.Printf("downloading %s\n", c.Path)
+		}
+
 		data, err := b.Fetch(c.Hash)
 		if err != nil {
 			return err
