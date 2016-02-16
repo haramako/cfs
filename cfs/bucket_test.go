@@ -187,14 +187,13 @@ func TestOverwriteFile(t *testing.T) {
 
 	assertContents(t, b, 3)
 	assertUploadCount(t, b, 3)
-
 }
 
 func TestCompress(t *testing.T) {
 	b, dir := setupBucket()
 
 	addFile(dir, "hoge", "piyo")
-	addFile(dir, "fuga", "hage")
+	addFile(dir, "fuga.raw", "hage")
 	addFile(dir, "piyo/piyo", "piyopiyo")
 	b.AddFiles(dir)
 
@@ -223,4 +222,27 @@ func TestCompress(t *testing.T) {
 		t.Errorf("invalid diff")
 		t.Error(string(output))
 	}
+}
+
+func TestRawFile(t *testing.T) {
+	b, dir := setupBucket()
+
+	addFile(dir, "hoge.raw", "raw1")
+	b.AddFiles(dir)
+	if b.Contents["hoge.raw"].Attr != ContentAttribute(0) {
+		t.Errorf("hoge.raw must be raw file")
+	}
+
+	addFile(dir, "hoge.raw", "raw1")
+	b.AddFiles(dir)
+	if b.Contents["hoge.raw"].Attr != ContentAttribute(0) {
+		t.Errorf("hoge.raw must be raw file")
+	}
+
+	addFile(dir, "fuga.noraw", "raw2")
+	b.AddFiles(dir)
+	if b.Contents["fuga.noraw"].Attr == ContentAttribute(0) {
+		t.Errorf("hoge.noraw must not be raw file")
+	}
+
 }

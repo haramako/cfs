@@ -35,6 +35,13 @@ type Bucket struct {
 	HashType    string
 }
 
+const (
+	Compressed = 1
+	Crypted    = 2
+)
+
+type ContentAttribute int
+
 type Content struct {
 	Path     string
 	Hash     string
@@ -42,6 +49,7 @@ type Content struct {
 	Size     int
 	OrigHash string
 	OrigSize int
+	Attr     ContentAttribute
 	Touched  bool
 }
 
@@ -53,6 +61,25 @@ type Uploader interface {
 
 type UploaderStat struct {
 	UploadCount int
+}
+
+func DefaultContentAttribute() ContentAttribute {
+	var result = 0
+	if Option.Compress {
+		result |= Compressed
+	}
+	if Option.EncryptKey != "" {
+		result |= Crypted
+	}
+	return ContentAttribute(result)
+}
+
+func (c ContentAttribute) Compressed() bool {
+	return (int(c) & Compressed) != 0
+}
+
+func (c ContentAttribute) Crypted() bool {
+	return (int(c) & Crypted) != 0
 }
 
 func BucketFromFile(path string, uploader Uploader) (*Bucket, error) {
@@ -96,7 +123,7 @@ func BucketFromUrl(url string, location string) (*Bucket, error) {
 	var body []byte
 	var err error
 	if strings.HasPrefix(location, "/data/") {
-		body, err = b.Fetch(location[len("/data/"):])
+		body, err = b.Fetch(location[len("/data/"):], DefaultContentAttribute())
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +132,7 @@ func BucketFromUrl(url string, location string) (*Bucket, error) {
 		if err != nil {
 			return nil, err
 		}
-		body, err = b.Fetch(string(hash))
+		body, err = b.Fetch(string(hash), DefaultContentAttribute())
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +159,23 @@ func (b *Bucket) Parse(s []byte) error {
 				if err != nil {
 					return err
 				}
-				b.Contents[col[1]] = Content{Hash: col[0], Path: col[1], Size: size, Time: time}
+				origSize, err := strconv.Atoi(col[5])
+				if err != nil {
+					return err
+				}
+				attr, err := strconv.Atoi(col[6])
+				if err != nil {
+					return err
+				}
+				b.Contents[col[1]] = Content{
+					Hash:     col[0],
+					Path:     col[1],
+					Size:     size,
+					Time:     time,
+					OrigHash: col[4],
+					OrigSize: origSize,
+					Attr:     ContentAttribute(attr),
+				}
 			}
 		}
 	}
@@ -170,10 +213,19 @@ func (b *Bucket) Dump() string {
 	r := make([]string, 0)
 	for _, k := range keys {
 		c := b.Contents[k]
-		r = append(r, strings.Join([]string{
-			c.Hash, c.Path, strconv.Itoa(c.Size), c.Time.Format(time.RFC3339),
-			c.OrigHash, strconv.Itoa(c.OrigSize),
-		}, "\t"))
+		r = append(
+			r,
+			strings.Join(
+				[]string{
+					c.Hash,
+					c.Path,
+					strconv.Itoa(c.Size),
+					c.Time.Format(time.RFC3339),
+					c.OrigHash,
+					strconv.Itoa(c.OrigSize),
+					strconv.Itoa(int(c.Attr)),
+				},
+				"\t"))
 	}
 
 	return strings.Join(r, "\n") + "\n"
@@ -184,7 +236,7 @@ func (b *Bucket) Finish() error {
 	orig_hash := b.Sum(orig_data)
 
 	if b.uploader != nil {
-		hash, _, err := b.Upload(orig_data, orig_hash)
+		hash, _, err := b.Upload(orig_data, orig_hash, DefaultContentAttribute())
 		if err != nil {
 			return err
 		}
@@ -222,12 +274,12 @@ func (b *Bucket) Close() {
 	}
 }
 
-func (b *Bucket) Upload(orig_data []byte, orig_hash string) (string, int, error) {
+func (b *Bucket) Upload(orig_data []byte, orig_hash string, attr ContentAttribute) (string, int, error) {
 	data := orig_data
 	hash := orig_hash
 	hash_changed := false
 
-	if Option.Compress {
+	if attr.Compressed() {
 		var buf bytes.Buffer
 		w := zlib.NewWriter(&buf)
 		w.Write(orig_data)
@@ -236,7 +288,7 @@ func (b *Bucket) Upload(orig_data []byte, orig_hash string) (string, int, error)
 		hash_changed = true
 	}
 
-	if Option.EncryptKey != "" {
+	if attr.Crypted() {
 		block, err := aes.NewCipher([]byte(Option.EncryptKey))
 		if err != nil {
 			panic(err)
@@ -262,13 +314,28 @@ func (b *Bucket) Upload(orig_data []byte, orig_hash string) (string, int, error)
 	return hash, len(data), nil
 }
 
+func (b *Bucket) GetAttribute(path string) ContentAttribute {
+	var attr = DefaultContentAttribute()
+	// TODO: とりあえずフィルタを固定している
+	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" {
+		attr = ContentAttribute(0)
+	}
+	return attr
+}
+
 func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
 	fullPath := path.Join(root, relative)
 	old, found := b.Contents[relative]
 	if found {
 		b.Contents[relative] = Content{
-			Path: old.Path, Hash: old.Hash, Time: old.Time, Size: old.Size,
-			OrigHash: old.OrigHash, OrigSize: old.OrigSize, Touched: true,
+			Path:     old.Path,
+			Hash:     old.Hash,
+			Size:     old.Size,
+			Time:     old.Time,
+			OrigHash: old.OrigHash,
+			OrigSize: old.OrigSize,
+			Attr:     old.Attr,
+			Touched:  true,
 		}
 		if !info.ModTime().After(old.Time) {
 			return false
@@ -285,18 +352,25 @@ func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
 		return false
 	}
 
-	if Verbose {
-		fmt.Printf("changed file %-12s (%s)\n", relative, orig_hash)
-	}
-
-	hash, size, err := b.Upload(orig_data, orig_hash)
+	attr := b.GetAttribute(relative)
+	hash, size, err := b.Upload(orig_data, orig_hash, attr)
 	if err != nil {
 		panic(err)
 	}
 
+	if Verbose {
+		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
+	}
+
 	b.Contents[relative] = Content{
-		Path: relative, Hash: hash, Size: size,
-		OrigHash: orig_hash, OrigSize: len(orig_data), Time: info.ModTime(), Touched: true,
+		Path:     relative,
+		Hash:     hash,
+		Size:     size,
+		Time:     info.ModTime(),
+		OrigHash: orig_hash,
+		OrigSize: len(orig_data),
+		Attr:     attr,
+		Touched:  true,
 	}
 	b.changed = true
 
@@ -353,7 +427,7 @@ func (b *Bucket) Sync(dir string) error {
 			fmt.Printf("downloading %s\n", c.Path)
 		}
 
-		data, err := b.Fetch(c.Hash)
+		data, err := b.Fetch(c.Hash, c.Attr)
 		if err != nil {
 			return err
 		}
@@ -371,13 +445,13 @@ func (b *Bucket) Sync(dir string) error {
 	return nil
 }
 
-func (b *Bucket) Fetch(hash string) ([]byte, error) {
+func (b *Bucket) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 	data, err := fetch(b.url + "/data/" + hash)
 	if err != nil {
 		return nil, err
 	}
 
-	if Option.EncryptKey != "" {
+	if attr.Crypted() {
 		block, err := aes.NewCipher([]byte(Option.EncryptKey))
 		if err != nil {
 			panic(err)
@@ -388,7 +462,7 @@ func (b *Bucket) Fetch(hash string) ([]byte, error) {
 		data = plain_data
 	}
 
-	if Option.Compress {
+	if attr.Compressed() {
 		r, err := zlib.NewReader(bytes.NewReader(data))
 		if err != nil {
 			return nil, err

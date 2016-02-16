@@ -163,7 +163,7 @@ func doFetch(c *cli.Context) {
 
 	bucket := cfs.BucketFromUrlOnly(url)
 
-	data, err := bucket.Fetch(location)
+	data, err := bucket.Fetch(location, cfs.DefaultContentAttribute())
 	if err != nil {
 		panic(err)
 	}

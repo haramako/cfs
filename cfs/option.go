@@ -19,7 +19,7 @@ type OptionInfo struct {
 }
 
 var Option = &OptionInfo{
-	Recursive:  true,
+	// Recursive:  true,
 	Compress:   true,
 	Flatten:    true,
 	EncryptKey: "aiRue7ooouNee0IeooneeN2eel9Aifie",
