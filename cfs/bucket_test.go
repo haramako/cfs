@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +17,8 @@ var tempDir = ""
 var timeCount = int64(0)
 
 func TestMain(m *testing.M) {
+	// Option.EncryptKey = ""
+	// Option.Compress = false
 	rand.Seed(time.Now().UnixNano())
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true
@@ -32,6 +34,7 @@ func TestMain(m *testing.M) {
 func setupBucket() (*Bucket, string) {
 
 	dir, err := ioutil.TempDir("", "cfs-test")
+	dir = filepath.FromSlash(dir)
 	if err != nil {
 		panic(err)
 	}
@@ -60,12 +63,12 @@ func setupBucket() (*Bucket, string) {
 			panic(err)
 		}
 	default:
-		if uploader, err = CreateFileUploader(tempDir); err != nil {
+		if uploader, err = CreateFileUploader(&FileOption{Root: tempDir}); err != nil {
 			panic(err)
 		}
 	}
 
-	bucket, err := BucketFromFile(dir+"/.bucket", uploader)
+	bucket, err := BucketFromFile(filepath.FromSlash(dir+"/.bucket"), uploader)
 	if err != nil {
 		panic(err)
 	}
@@ -94,7 +97,12 @@ func setupBucketFromUrl(location string) *Bucket {
 	case "sftp":
 		// PENDING
 	default:
-		bucket, err := BucketFromUrl("file://"+tempDir, location)
+		// windows で file:///C:/hoge/fuga のような形にする
+		url := tempDir
+		if !strings.HasPrefix(url, "/") {
+			url = "/" + tempDir
+		}
+		bucket, err := BucketFromUrl("file://"+filepath.ToSlash(url), location)
 		if err != nil {
 			panic(err)
 		}
@@ -116,8 +124,8 @@ func assertUploadCount(t *testing.T, b *Bucket, n int) {
 }
 
 func addFile(dir, file, content string) {
-	fullpath := path.Join(dir, file)
-	fulldir, _ := path.Split(fullpath)
+	fullpath := filepath.Join(filepath.FromSlash(dir), filepath.FromSlash(file))
+	fulldir, _ := filepath.Split(fullpath)
 	err := os.MkdirAll(fulldir, 0777)
 	if err != nil {
 		panic(err)
@@ -177,12 +185,12 @@ func TestOverwriteFile(t *testing.T) {
 
 	assertUploadCount(t, b, 2)
 
-	addFile(dir, "piyo/piyo", "piyo2")
+	addFile(dir, filepath.FromSlash("piyo/piyo"), "piyo2")
 	b.AddFiles(dir)
 
 	assertUploadCount(t, b, 3)
 
-	addFile(dir, "piyo/piyo", "piyo2")
+	addFile(dir, filepath.FromSlash("piyo/piyo"), "piyo2")
 	b.AddFiles(dir)
 
 	assertContents(t, b, 3)

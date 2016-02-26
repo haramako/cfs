@@ -9,6 +9,7 @@ import (
 type OptionInfo struct {
 	Tag        string          `json:"tag"`
 	Repository string          `json:"repository"`
+	File       FileOption      `json:"file"`
 	Aws        S3UploderOption `json:"aws"`
 	Sftp       SftpOption      `json:"sftp"`
 	Recursive  bool            `json:"recursive"`
@@ -19,7 +20,7 @@ type OptionInfo struct {
 }
 
 var Option = &OptionInfo{
-	// Recursive:  true,
+	Recursive:  true,
 	Compress:   true,
 	Flatten:    true,
 	EncryptKey: "aiRue7ooouNee0IeooneeN2eel9Aifie",

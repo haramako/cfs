@@ -89,7 +89,7 @@ func BucketFromFile(path string, uploader Uploader) (*Bucket, error) {
 		uploader: uploader,
 		HashType: "md5",
 	}
-	data, err := ioutil.ReadFile(path)
+	data, err := ioutil.ReadFile(filepath.FromSlash(path))
 	if err == nil {
 		if Verbose {
 			fmt.Printf("read bucket from '%s'\n", b.Path)
@@ -198,6 +198,10 @@ func (b *Bucket) RemoveUntouched() {
 	for _, c := range b.Contents {
 		if c.Touched {
 			newContents[c.Path] = c
+		} else {
+			if Verbose {
+				fmt.Printf("removed: %s\n", c.Path)
+			}
 		}
 	}
 	b.Contents = newContents
@@ -255,12 +259,12 @@ func (b *Bucket) Finish() error {
 		}
 	}
 
-	err := ioutil.WriteFile(b.Path, orig_data, 0666)
+	err := ioutil.WriteFile(filepath.FromSlash(b.Path), orig_data, 0666)
 	if err != nil {
 		return err
 	}
 
-	ioutil.WriteFile(b.Path+".hash", []byte(b.Hash), 0666)
+	ioutil.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
 	if Verbose {
 		fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
 	}
@@ -317,7 +321,7 @@ func (b *Bucket) Upload(orig_data []byte, orig_hash string, attr ContentAttribut
 func (b *Bucket) GetAttribute(path string) ContentAttribute {
 	var attr = DefaultContentAttribute()
 	// TODO: とりあえずフィルタを固定している
-	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" {
+	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" || filepath.Ext(path) == ".pbx" {
 		attr = ContentAttribute(0)
 	}
 	return attr
@@ -326,8 +330,9 @@ func (b *Bucket) GetAttribute(path string) ContentAttribute {
 func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
 	fullPath := path.Join(root, relative)
 	old, found := b.Contents[relative]
+	key := filepath.ToSlash(relative)
 	if found {
-		b.Contents[relative] = Content{
+		b.Contents[key] = Content{
 			Path:     old.Path,
 			Hash:     old.Hash,
 			Size:     old.Size,
@@ -362,7 +367,7 @@ func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
 		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
 	}
 
-	b.Contents[relative] = Content{
+	b.Contents[key] = Content{
 		Path:     relative,
 		Hash:     hash,
 		Size:     size,
@@ -390,7 +395,9 @@ func (b *Bucket) AddFiles(root string) {
 		}
 
 		// TODO: filepath.Matchがちゃんと働かないため、とりあえず対応
-		if filepath.Ext(path2) == ".meta" {
+		if strings.HasPrefix(path2, ".") || strings.HasPrefix(path2, "#") ||
+			strings.HasSuffix(path2, "~") ||
+			filepath.Ext(path2) == ".meta" || filepath.Ext(path2) == ".manifest" {
 			return nil
 		}
 
@@ -432,12 +439,12 @@ func (b *Bucket) Sync(dir string) error {
 			return err
 		}
 
-		err = os.MkdirAll(path.Dir(path.Join(dir, c.Path)), 0777)
+		err = os.MkdirAll(filepath.Dir(filepath.Join(dir, filepath.FromSlash(c.Path))), 0777)
 		if err != nil {
 			return err
 		}
 
-		err = ioutil.WriteFile(path.Join(dir, c.Path), data, 0666)
+		err = ioutil.WriteFile(filepath.Join(dir, filepath.FromSlash(c.Path)), data, 0666)
 		if err != nil {
 			return err
 		}
@@ -476,9 +483,17 @@ func (b *Bucket) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 	return data, nil
 }
 
+func isWindows() bool {
+	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
+}
+
 func fetch(url string) ([]byte, error) {
 	t := &http.Transport{}
-	t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
+	if isWindows() {
+		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("")))
+	} else {
+		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
+	}
 	c := &http.Client{Transport: t}
 
 	res, err := c.Get(url)

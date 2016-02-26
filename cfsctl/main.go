@@ -81,7 +81,7 @@ func doUpload(c *cli.Context) {
 	case "sftp":
 		u, err = cfs.CreateSftpUploader(&cfs.Option.Sftp)
 	default:
-		u, err = cfs.CreateFileUploader("/tmp/cfstmp")
+		u, err = cfs.CreateFileUploader(&cfs.Option.File)
 	}
 	if err != nil {
 		panic(err)

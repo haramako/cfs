@@ -7,7 +7,6 @@ import (
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"os/user"
 	"path"
 	"strconv"
@@ -178,9 +177,13 @@ func (u *SftpUploader) Upload(_path string, body []byte, overwrite bool) error {
 	if err != nil {
 		return err
 	}
+	file.Close()
 
-	err = os.Rename(temp_path, fullpath)
+	u.conn.Remove(fullpath) // ignore error
+
+	err = u.conn.Rename(temp_path, fullpath)
 	if err != nil {
+		fmt.Printf("%s", err)
 		return fmt.Errorf("cannot rename temp file %s to %s", temp_path, fullpath)
 	}
 
