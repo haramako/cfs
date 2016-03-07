@@ -2,34 +2,14 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"github.com/codegangsta/cli"
-	"github.com/haramako/cfs/cfs"
-	"math/rand"
+	"github.com/haramako/cfs"
 	"os"
-	"time"
 )
 
 // エントリーポイント
 
-var (
-	optVerbose   = flag.Bool("v", false, "verbose")
-	optHelp      = flag.Bool("h", false, "show this help")
-	optFile      = flag.String("f", ".bucket", "bucket filename")
-	optTag       = flag.String("tag", "", "tag name")
-	optRecursive = flag.Bool("r", false, "recursive")
-)
-
-func showHelp() {
-	fmt.Println("ContentFileSystem Tools")
-	fmt.Println("Usage:")
-	flag.PrintDefaults()
-	os.Exit(0)
-}
-
 func main() {
-	rand.Seed(time.Now().UnixNano())
 
 	cfs.LoadDefaultOptions()
 
@@ -58,11 +38,6 @@ var UploadCommand = cli.Command{
 	Action: doUpload,
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "c",
-			Value: "",
-			Usage: "specify cabinet type (file, sftp or s3)",
-		},
-		cli.StringFlag{
 			Name:  "tag",
 			Value: "",
 			Usage: "specify tag name",
@@ -73,21 +48,12 @@ var UploadCommand = cli.Command{
 func doUpload(c *cli.Context) {
 	cfs.Verbose = c.GlobalBool("V")
 
-	var u cfs.Uploader
-	var err error
-	switch c.String("c") {
-	case "s3":
-		u, err = cfs.CreateS3Uploader("cfs-dev")
-	case "sftp":
-		u, err = cfs.CreateSftpUploader(&cfs.Option.Sftp)
-	default:
-		u, err = cfs.CreateFileUploader(&cfs.Option.File)
-	}
+	u, err := cfs.CreateUploader("") // TODO
 	if err != nil {
 		panic(err)
 	}
 
-	bucket, err := cfs.BucketFromFile(*optFile, u)
+	bucket, err := cfs.BucketFromFile("", u)
 	if err != nil {
 		panic(err)
 	}
@@ -151,23 +117,27 @@ var FetchCommand = cli.Command{
 }
 
 func doFetch(c *cli.Context) {
-	cfs.Verbose = c.GlobalBool("V")
+	/*
+		cfs.Verbose = c.GlobalBool("V")
 
-	var args = c.Args()
-	if len(args) < 2 {
-		panic("need 2 arguments")
-	}
+		var args = c.Args()
+		if len(args) < 2 {
+			panic("need 2 arguments")
+		}
 
-	url := args[0]
-	location := args[1]
+		url := args[0]
+		location := args[1]
 
-	bucket := cfs.BucketFromUrlOnly(url)
+		bucket, err := cfs.BucketFromUrl(url)
+		if err != nil {
+			panic(err)
+		}
 
-	data, err := bucket.Fetch(location, cfs.DefaultContentAttribute())
-	if err != nil {
-		panic(err)
-	}
+		data, err := bucket.Fetch(location, cfs.DefaultContentAttribute())
+		if err != nil {
+			panic(err)
+		}
 
-	print(string(data))
-
+		print(string(data))
+	*/
 }

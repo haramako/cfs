@@ -1,3 +1,5 @@
 *.bucket
 *.hash
 /cfsctl/cfsctl
+/cfssv/cfssv
+/cfssv/data
