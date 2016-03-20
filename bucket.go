@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,7 +20,7 @@ import (
 	"time"
 )
 
-var ExcludePetterns = []string{".*", "*.vdat", "cfs", "*.meta"}
+var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 var Verbose = false
 
 type Bucket struct {
@@ -28,11 +29,12 @@ type Bucket struct {
 	Hash        string
 	ExcludeList []string
 	Contents    map[string]Content
-	Uploader    *Uploader
+	CabinetUrl  *url.URL
 	changed     bool
 	BaseUrl     *url.URL
 	location    string
 	HashType    string
+	UploadCount int
 }
 
 const (
@@ -72,12 +74,17 @@ func (c ContentAttribute) Crypted() bool {
 	return (int(c) & Crypted) != 0
 }
 
-func BucketFromFile(path string, uploader *Uploader) (*Bucket, error) {
+func BucketFromFile(path string) (*Bucket, error) {
+	cabinetUrl, err := url.Parse(Option.Cabinet)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cabinet url '%s'", Option.Cabinet)
+	}
+
 	b := &Bucket{
-		Path:     path,
-		Contents: make(map[string]Content),
-		Uploader: uploader,
-		HashType: "md5",
+		Path:       path,
+		Contents:   make(map[string]Content),
+		CabinetUrl: cabinetUrl,
+		HashType:   "md5",
 	}
 	data, err := ioutil.ReadFile(filepath.FromSlash(path))
 	if err == nil {
@@ -216,15 +223,13 @@ func (b *Bucket) Finish() error {
 	orig_data := []byte(b.Dump())
 	orig_hash := b.Sum(orig_data)
 
-	if b.Uploader != nil {
-		hash, _, err := b.Upload(orig_data, orig_hash, DefaultContentAttribute())
-		if err != nil {
-			return err
-		}
-		b.Hash = hash
+	hash, _, err := b.Upload("*bucket*", orig_data, orig_hash, DefaultContentAttribute())
+	if err != nil {
+		return err
 	}
+	b.Hash = hash
 
-	err := ioutil.WriteFile(filepath.FromSlash(b.Path), orig_data, 0666)
+	err = ioutil.WriteFile(filepath.FromSlash(b.Path), orig_data, 0666)
 	if err != nil {
 		return err
 	}
@@ -249,7 +254,7 @@ func isHash(str string) bool {
 	return true
 }
 
-func (b *Bucket) Upload(orig_data []byte, orig_hash string, attr ContentAttribute) (string, int, error) {
+func (b *Bucket) Upload(filename string, orig_data []byte, orig_hash string, attr ContentAttribute) (string, int, error) {
 	if !isHash(orig_hash) {
 		return "", 0, fmt.Errorf("invalid hash %s", orig_hash)
 	}
@@ -283,15 +288,69 @@ func (b *Bucket) Upload(orig_data []byte, orig_hash string, attr ContentAttribut
 		hash = b.Sum(data)
 	}
 
-	if b.Uploader != nil {
-		key := fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:])
-		err := b.Uploader.Upload(key, data, false)
-		if err != nil {
-			return "", 0, err
-		}
+	err := b.uploadFile(filename, hash, data, false)
+	if err != nil {
+		return "", 0, err
 	}
 
 	return hash, len(data), nil
+}
+
+func (b *Bucket) post(location string, body []byte) ([]byte, error) {
+	cli := &http.Client{}
+
+	url, err := b.CabinetUrl.Parse(location)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse url %s", location)
+	}
+
+	req, err := http.NewRequest("POST", url.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("cannot create request %s", url.String())
+	}
+
+	req.SetBasicAuth(Option.AdminUser, Option.AdminPass)
+	resp, err := cli.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error request to %s, %s", url.String(), err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("response code not 200 OK, %s", url.String())
+	}
+
+	resp_body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read body %s", url.String())
+	}
+
+	return resp_body, nil
+}
+
+func (b *Bucket) uploadFile(filename string, hash string, body []byte, overwrite bool) error {
+
+	nonexists_res, err := b.post("_admin/nonexists", []byte(hash))
+	if err != nil {
+		return err
+	}
+
+	if len(nonexists_res) == 0 {
+		return nil
+	}
+
+	_, err = b.post(path.Join("_admin/upload", hash), body)
+	if err != nil {
+		return err
+	}
+
+	b.UploadCount++
+
+	//if Verbose {
+	fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
+	//}
+
+	return nil
 }
 
 func (b *Bucket) GetAttribute(path string) ContentAttribute {
@@ -303,9 +362,12 @@ func (b *Bucket) GetAttribute(path string) ContentAttribute {
 	return attr
 }
 
-func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
+func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) (bool, error) {
 	fullPath := filepath.Join(root, relative)
 	key := filepath.ToSlash(relative)
+	if Option.Flatten {
+		key = filepath.Base(key)
+	}
 	old, found := b.Contents[key]
 	if found {
 		b.Contents[key] = Content{
@@ -319,29 +381,29 @@ func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
 			Touched:  true,
 		}
 		if !info.ModTime().After(old.Time) {
-			return false
+			return false, nil
 		}
 	}
 
 	orig_data, err := ioutil.ReadFile(fullPath)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 
 	orig_hash := b.Sum(orig_data)
 	if found && old.OrigHash == orig_hash {
-		return false
+		return false, nil
 	}
 
 	attr := b.GetAttribute(relative)
-	hash, size, err := b.Upload(orig_data, orig_hash, attr)
+	hash, size, err := b.Upload(relative, orig_data, orig_hash, attr)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 
-	if Verbose {
-		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
-	}
+	//if Verbose {
+	fmt.Printf("changed file %-12s (%s)\n", relative, hash)
+	//}
 
 	b.Contents[key] = Content{
 		Path:     key,
@@ -355,11 +417,11 @@ func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) bool {
 	}
 	b.changed = true
 
-	return true
+	return true, nil
 }
 
-func (b *Bucket) AddFiles(root string) {
-	filepath.Walk(root, func(path2 string, info os.FileInfo, err error) error {
+func (b *Bucket) AddFiles(root string) error {
+	return filepath.Walk(root, func(path2 string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -371,14 +433,16 @@ func (b *Bucket) AddFiles(root string) {
 		}
 
 		// TODO: filepath.Matchがちゃんと働かないため、とりあえず対応
-		if strings.HasPrefix(path2, ".") || strings.HasPrefix(path2, "#") ||
-			strings.HasSuffix(path2, "~") ||
-			filepath.Ext(path2) == ".meta" || filepath.Ext(path2) == ".manifest" {
+		ext := filepath.Ext(path2)
+		base := filepath.Base(path2)
+		if strings.HasPrefix(base, ".") || strings.HasPrefix(base, "#") ||
+			strings.HasSuffix(base, "~") ||
+			ext == ".meta" || ext == ".manifest" || ext == ".tmx" || ext == ".png" {
 			return nil
 		}
 
 		if path2 != "." {
-			for _, pat := range ExcludePetterns {
+			for _, pat := range ExcludePatterns {
 				if match, err := filepath.Match(pat, path2); match || err != nil {
 					if info.Mode().IsDir() {
 						return filepath.SkipDir

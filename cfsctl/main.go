@@ -2,6 +2,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs"
 	"os"
@@ -11,16 +12,24 @@ import (
 
 func main() {
 
-	cfs.LoadDefaultOptions()
-
 	app := cli.NewApp()
 	app.Name = "cfs"
 	app.HelpName = "cfs"
-	app.Usage = "cfs hoge fuga"
+	app.Usage = "cfs client"
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
-			Name:  "V",
+			Name:  "verbose, V",
 			Usage: "verbose",
+		},
+		cli.StringFlag{
+			Name:  "config, C",
+			Value: ".cfsenv",
+			Usage: "config file",
+		},
+		cli.StringFlag{
+			Name:  "cabinet, c",
+			Value: "",
+			Usage: "cabinet URL",
 		},
 	}
 	app.Commands = []cli.Command{
@@ -29,7 +38,10 @@ func main() {
 		FetchCommand,
 	}
 
-	app.Run(os.Args)
+	err := app.Run(os.Args)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 var UploadCommand = cli.Command{
@@ -38,27 +50,35 @@ var UploadCommand = cli.Command{
 	Action: doUpload,
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "tag",
+			Name:  "tag, t",
 			Value: "",
-			Usage: "specify tag name",
+			Usage: "tag name",
+		},
+		cli.StringFlag{
+			Name:  "bucket, b",
+			Value: ".bucket",
+			Usage: "bucket file name",
 		},
 	},
 }
 
-func doUpload(c *cli.Context) {
+func loadConfig(c *cli.Context) {
 	cfs.Verbose = c.GlobalBool("V")
-
-	u, err := cfs.CreateUploader("") // TODO
-	if err != nil {
-		panic(err)
+	cfs.LoadDefaultOptions(c.GlobalString("config"))
+	if c.GlobalString("cabinet") != "" {
+		cfs.Option.Cabinet = c.GlobalString("cabinet")
 	}
+}
 
-	bucket, err := cfs.BucketFromFile("", u)
+func doUpload(c *cli.Context) {
+	loadConfig(c)
+
+	bucket, err := cfs.BucketFromFile(c.String("bucket"))
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	bucket.Tag = c.String("tag")
-	println(bucket.Tag)
 
 	args := c.Args()
 	if len(args) == 0 {
@@ -66,13 +86,18 @@ func doUpload(c *cli.Context) {
 	}
 
 	for _, path := range args {
-		bucket.AddFiles(path)
+		err = bucket.AddFiles(path)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 
 	bucket.RemoveUntouched()
 	err = bucket.Finish()
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -85,7 +110,7 @@ var SyncCommand = cli.Command{
 }
 
 func doSync(c *cli.Context) {
-	cfs.Verbose = c.GlobalBool("V")
+	loadConfig(c)
 
 	var args = c.Args()
 	if len(args) < 3 {
@@ -117,6 +142,7 @@ var FetchCommand = cli.Command{
 }
 
 func doFetch(c *cli.Context) {
+	loadConfig(c)
 	/*
 		cfs.Verbose = c.GlobalBool("V")
 

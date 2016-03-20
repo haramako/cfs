@@ -1,36 +1,44 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/haramako/cfs/server"
+	"io/ioutil"
 	"os"
 	"strconv"
 )
 
 func main() {
 
-	var port int
-	var err error
-	port_str := os.Getenv("PORT")
-	if len(port_str) == 0 {
-		port = 3000
-	} else {
-		port, err = strconv.Atoi(os.Getenv("PORT"))
+	sv := &server.Server{
+		FpRoot: ".",
+		Port:   8086,
+	}
+
+	conf, err := ioutil.ReadFile("cfssv.conf")
+	if err == nil {
+		println("read cfssv.conf")
+		err = json.Unmarshal(conf, sv)
 		if err != nil {
-			fmt.Printf("%s\n", err)
-			return
+			fmt.Printf("cannot load cfssv.conf, %s\n", err)
+			os.Exit(1)
 		}
 	}
 
-	sv := server.Server{
-		FpRoot: ".",
-		Port:   port,
+	port_str := os.Getenv("PORT")
+	if port_str != "" {
+		sv.Port, err = strconv.Atoi(port_str)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 
 	err = sv.Init()
 	if err != nil {
-		fmt.Printf("%s\n", err)
-		return
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	sv.Start()

@@ -12,8 +12,10 @@ import (
 )
 
 type Server struct {
-	FpRoot string
-	Port   int
+	FpRoot    string `json:"root_filepath"`
+	Port      int
+	AdminUser string
+	AdminPass string
 }
 
 func isHash(str string) bool {
@@ -81,8 +83,8 @@ func (s *Server) nonexists(c *gin.Context) {
 	result := make([]string, len(hash_list))
 
 	for _, hash := range hash_list {
-		stat, err := os.Stat(s.hashFilepath(hash))
-		if err == nil || stat == nil {
+		_, err := os.Stat(s.hashFilepath(hash))
+		if err != nil && os.IsNotExist(err) {
 			result = append(result, hash)
 		}
 	}
@@ -91,11 +93,22 @@ func (s *Server) nonexists(c *gin.Context) {
 
 func (s *Server) Start() {
 	r := gin.Default()
-	r.StaticFile("/", "./assets/index.html")
-	r.POST("/upload/:hash", s.upload)
-	r.POST("/nonexists", s.nonexists)
-	r.StaticFS("/assets", http.Dir("./assets"))
 	r.StaticFS("/data", http.Dir(filepath.Join(s.FpRoot, "data")))
+	r.StaticFS("/assets", http.Dir("./assets"))
+
+	var admin *gin.RouterGroup
+	if s.AdminUser == "" {
+		admin = r.Group("/_admin")
+	} else {
+		accounts := gin.Accounts{s.AdminUser: s.AdminPass}
+		admin = r.Group("/_admin", gin.BasicAuth(accounts))
+	}
+	fmt.Println(s)
+
+	admin.StaticFile("/", "./assets/index.html")
+	admin.POST("/upload/:hash", s.upload)
+	admin.POST("/nonexists", s.nonexists)
+
 	r.Run(fmt.Sprintf(":%d", s.Port))
 }
 

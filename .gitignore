@@ -1,5 +1,9 @@
 *.bucket
 *.hash
+gin-bin
 /cfsctl/cfsctl
+/cfsctl/.cfsenv
+/cfssv/cfssv.conf
 /cfssv/cfssv
 /cfssv/data
+/bin

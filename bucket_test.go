@@ -18,8 +18,12 @@ var tempDir = ""
 var timeCount = int64(0)
 
 func TestMain(m *testing.M) {
-	// Option.EncryptKey = ""
-	// Option.Compress = false
+	Option.EncryptKey = "12345678901234567890123456789012"
+	Option.EncryptIv = "1234567890123456"
+	Option.AdminUser = "admin"
+	Option.AdminPass = "pass"
+	Option.Cabinet = "http://localhost:9999/"
+
 	rand.Seed(time.Now().UnixNano())
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true
@@ -32,8 +36,10 @@ func TestMain(m *testing.M) {
 
 	tempDir = "/tmp/hogehoge"
 	sv := &server.Server{
-		FpRoot: tempDir,
-		Port:   9999,
+		FpRoot:    tempDir,
+		Port:      9999,
+		AdminUser: "admin",
+		AdminPass: "pass",
 	}
 	err = sv.Init()
 	if err != nil {
@@ -54,12 +60,7 @@ func setupBucket() (*Bucket, string) {
 		panic(err)
 	}
 
-	uploader, err := CreateUploader("http://localhost:9999/")
-	if err != nil {
-		panic(err)
-	}
-
-	bucket, err := BucketFromFile(filepath.FromSlash(dir+"/.bucket"), uploader)
+	bucket, err := BucketFromFile(filepath.FromSlash(dir + "/.bucket"))
 	if err != nil {
 		panic(err)
 	}
@@ -75,9 +76,7 @@ func setupBucketWithFiles() (*Bucket, string) {
 
 	b.AddFiles(dir)
 
-	if b.Uploader != nil {
-		b.Uploader.UploadCount = 0
-	}
+	b.UploadCount = 0
 	return b, dir
 }
 
@@ -96,7 +95,7 @@ func assertContents(t *testing.T, b *Bucket, n int) {
 }
 
 func assertUploadCount(t *testing.T, b *Bucket, n int) {
-	if b.Uploader.UploadCount != n {
+	if b.UploadCount != n {
 		// t.Errorf("upload count must be %v but %v", n, b.Uploader.UploadCount)
 	}
 }
@@ -190,7 +189,7 @@ func TestCompress(t *testing.T) {
 		return
 	}
 
-	b2 := setupBucketFromUrl(b.Uploader.Url.String(), b.Hash)
+	b2 := setupBucketFromUrl(b.CabinetUrl.String(), b.Hash)
 	if b2 == nil {
 		return // なにもしない
 	}

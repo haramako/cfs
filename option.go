@@ -1,42 +1,50 @@
 package cfs
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 )
 
 type OptionInfo struct {
-	Tag        string `json:"tag"`
-	Repository string `json:"repository"`
-	Recursive  bool   `json:"recursive"`
-	Flatten    bool   `json:"flatten"`
-	Compress   bool   `json:"compress"`
-	EncryptKey string `json:"encryptKey"`
-	EncryptIv  string `json:"encryptIv"`
+	Tag        string
+	Repository string
+	Recursive  bool
+	Flatten    bool
+	Compress   bool
+	EncryptKey string
+	EncryptIv  string
+	Cabinet    string
+	AdminUser  string
+	AdminPass  string
 }
 
 var Option = &OptionInfo{
 	Recursive:  true,
 	Compress:   true,
-	Flatten:    true,
-	EncryptKey: "aiRue7ooouNee0IeooneeN2eel9Aifie",
-	EncryptIv:  "Yee9zoogoow3Geiz",
+	Flatten:    false,
+	EncryptKey: "",
+	EncryptIv:  "",
+	Cabinet:    "http://localhost:8086",
 }
 
-func LoadDefaultOptions() {
-	data, err := ioutil.ReadFile(".cfsenv")
-	if err != nil {
-		return
+func LoadDefaultOptions(configFile string) {
+	if configFile == "" {
+		configFile = ".cfsenv"
 	}
-	Option.Parse(data)
+	data, err := ioutil.ReadFile(configFile)
+	if err == nil {
+		err = Option.Parse(data)
+		if err != nil {
+			fmt.Printf("cannot parse %s, %s\n", configFile, err)
+		}
+		if Verbose {
+			option_json, _ := json.Marshal(Option)
+			fmt.Printf("option loaded as %s\n", option_json)
+		}
+	}
 }
 
 func (o *OptionInfo) Parse(data []byte) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	err := dec.Decode(o)
-	if err != nil {
-		return err
-	}
-	return nil
+	return json.Unmarshal(data, o)
 }
