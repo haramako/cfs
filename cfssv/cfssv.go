@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/haramako/cfs/server"
+	"github.com/haramako/cfs"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -11,7 +11,7 @@ import (
 
 func main() {
 
-	sv := &server.Server{
+	sv := &cfs.Server{
 		FpRoot: ".",
 		Port:   8086,
 	}

@@ -1,6 +1,0 @@
-{
-	"sftp": {
-		"host": "localhost",
-		"rootPath": "/Users/makoto/cfs-test"
-	}
-}

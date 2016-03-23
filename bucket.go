@@ -7,6 +7,7 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -239,6 +240,27 @@ func (b *Bucket) Finish() error {
 		fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
 	}
 
+	if b.Tag != "" {
+		tag := TagFile{
+			Name:       b.Tag,
+			CreatedAt:  time.Now(),
+			EncryptKey: Option.EncryptKey,
+			EncryptIv:  Option.EncryptIv,
+			Attr:       DefaultContentAttribute(),
+			Hash:       b.Hash,
+		}
+
+		tagBytes, err := json.Marshal(tag)
+		if err != nil {
+			return err
+		}
+
+		_, err = b.post(path.Join("_admin/tags", b.Tag), tagBytes)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -294,6 +316,33 @@ func (b *Bucket) Upload(filename string, orig_data []byte, orig_hash string, att
 	}
 
 	return hash, len(data), nil
+}
+
+func (b *Bucket) Decode(data []byte, attr ContentAttribute) ([]byte, error) {
+
+	if attr.Compressed() {
+		var buf bytes.Buffer
+		r, err := zlib.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		r.Read(data)
+		r.Close()
+		data = buf.Bytes()
+	}
+
+	if attr.Crypted() {
+		block, err := aes.NewCipher([]byte(Option.EncryptKey))
+		if err != nil {
+			return nil, err
+		}
+		cfb := cipher.NewCFBEncrypter(block, []byte(Option.EncryptIv))
+		cipher_data := make([]byte, len(data))
+		cfb.XORKeyStream(cipher_data, data)
+		data = cipher_data
+	}
+
+	return data, nil
 }
 
 func (b *Bucket) post(location string, body []byte) ([]byte, error) {

@@ -1,0 +1,15 @@
+.header {
+  height: 80px;
+}
+
+.target-name-panel {
+  text-align: center;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.log {
+  height: 600px;
+  overflow: scroll;
+}
+

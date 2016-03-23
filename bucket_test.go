@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"fmt"
-	"github.com/haramako/cfs/server"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -35,7 +34,7 @@ func TestMain(m *testing.M) {
 	}
 
 	tempDir = "/tmp/hogehoge"
-	sv := &server.Server{
+	sv := &Server{
 		FpRoot:    tempDir,
 		Port:      9999,
 		AdminUser: "admin",
@@ -233,4 +232,19 @@ func TestRawFile(t *testing.T) {
 		t.Errorf("hoge.noraw must not be raw file")
 	}
 
+}
+
+func TestTag(t *testing.T) {
+	b, dir := setupBucket()
+	b.Tag = "test"
+
+	addFile(dir, "hoge.txt", "hoge")
+	b.AddFiles(dir)
+
+	err := b.Finish()
+	if err != nil {
+		t.Errorf("cannot finish bucket")
+		t.Error(err)
+		return
+	}
 }

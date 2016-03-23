@@ -6,4 +6,6 @@ gin-bin
 /cfssv/cfssv.conf
 /cfssv/cfssv
 /cfssv/data
+/cfssv/tags
+/cfssv/versions
 /bin
