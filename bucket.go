@@ -255,7 +255,7 @@ func (b *Bucket) Finish() error {
 			return err
 		}
 
-		_, err = b.post(path.Join("_admin/tags", b.Tag), tagBytes)
+		_, err = b.post(path.Join("api/tags", b.Tag), tagBytes)
 		if err != nil {
 			return err
 		}
@@ -366,7 +366,7 @@ func (b *Bucket) post(location string, body []byte) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("response code not 200 OK, %s", url.String())
+		return nil, fmt.Errorf("response code not 200 OK but %d, %s", resp.StatusCode, url.String())
 	}
 
 	resp_body, err := ioutil.ReadAll(resp.Body)
@@ -379,7 +379,7 @@ func (b *Bucket) post(location string, body []byte) ([]byte, error) {
 
 func (b *Bucket) uploadFile(filename string, hash string, body []byte, overwrite bool) error {
 
-	nonexists_res, err := b.post("_admin/nonexists", []byte(hash))
+	nonexists_res, err := b.post("api/nonexists", []byte(hash))
 	if err != nil {
 		return err
 	}
@@ -388,7 +388,7 @@ func (b *Bucket) uploadFile(filename string, hash string, body []byte, overwrite
 		return nil
 	}
 
-	_, err = b.post(path.Join("_admin/upload", hash), body)
+	_, err = b.post(path.Join("api/upload", hash), body)
 	if err != nil {
 		return err
 	}
@@ -405,7 +405,7 @@ func (b *Bucket) uploadFile(filename string, hash string, body []byte, overwrite
 func (b *Bucket) GetAttribute(path string) ContentAttribute {
 	var attr = DefaultContentAttribute()
 	// TODO: とりあえずフィルタを固定している
-	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" || filepath.Ext(path) == ".pbx" {
+	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" || filepath.Ext(path) == ".pbx" || filepath.Ext(path) == ".mp4" {
 		attr = ContentAttribute(0)
 	}
 	return attr

@@ -284,10 +284,20 @@ func (s *Server) stat(c *gin.Context) {
 
 func (s *Server) Start() {
 	r := gin.Default()
+
 	r.StaticFS("/data", http.Dir(filepath.Join(s.FpRoot, "data")))
 	r.StaticFS("/assets", http.Dir("./assets"))
 
-	api := r.Group("/api")
+	var api, ui gin.IRoutes
+	if s.AdminUser != "" {
+		accounts := gin.Accounts{s.AdminUser: s.AdminPass}
+		api = r.Group("/api", gin.BasicAuth(accounts))
+		ui = r.Group("/ui", gin.BasicAuth(accounts))
+	}else{
+		api = r.Group("/api")
+		ui = r.Group("/ui")
+	}
+	
 	{
 		api.POST("/upload/:hash", s.upload)
 		api.POST("/nonexists", s.nonexists)
@@ -299,7 +309,6 @@ func (s *Server) Start() {
 		api.GET("/tags/:id/versions", s.indexTagsVersions)
 	}
 
-	ui := r.Group("/ui")
 	ui.GET("/*dummy", func(c *gin.Context) {
 		file, err := ioutil.ReadFile("./assets/index.html")
 		if err != nil {
@@ -308,12 +317,6 @@ func (s *Server) Start() {
 		}
 		c.Data(200, "text/html", file)
 	})
-
-	if s.AdminUser != "" {
-		accounts := gin.Accounts{s.AdminUser: s.AdminPass}
-		api.Use(gin.BasicAuth(accounts))
-		ui.Use(gin.BasicAuth(accounts))
-	}
 
 	// redirect _admin/* to api/*
 	r.Any("/_admin/*path", func(c *gin.Context) {

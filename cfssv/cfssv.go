@@ -19,7 +19,7 @@ func main() {
 	conf, err := ioutil.ReadFile("cfssv.conf")
 	if err == nil {
 		println("read cfssv.conf")
-		err = json.Unmarshal(conf, sv)
+		err = json.Unmarshal(conf, &sv)
 		if err != nil {
 			fmt.Printf("cannot load cfssv.conf, %s\n", err)
 			os.Exit(1)

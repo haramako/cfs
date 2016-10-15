@@ -9,3 +9,5 @@ gin-bin
 /cfssv/tags
 /cfssv/versions
 /bin
+/**/Godeps/Readme
+/**/Godeps/_workspace
