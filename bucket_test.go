@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,25 +34,29 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	tempDir = "/tmp/hogehoge"
-	sv := &Server{
-		FpRoot:    tempDir,
-		Port:      9999,
-		AdminUser: "admin",
-		AdminPass: "pass",
+	switch os.Getenv("CFS_TEST_STORAGE") {
+	case "gcs":
+		Option.Cabinet = "http://storage.googleapis.com/cfs/"
+	default:
+		tempDir = "/tmp/hogehoge"
+		sv := &Server{
+			RootFilepath: tempDir,
+			Port:         9999,
+			AdminUser:    "admin",
+			AdminPass:    "pass",
+		}
+		err = sv.Init()
+		if err != nil {
+			panic(err)
+		}
+		go sv.Start()
+		time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
 	}
-	err = sv.Init()
-	if err != nil {
-		panic(err)
-	}
-	go sv.Start()
-
-	time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
 
 	os.Exit(m.Run())
 }
 
-func setupBucket() (*Bucket, string) {
+func setupBucket() (*Client, *Bucket, string) {
 
 	dir, err := ioutil.TempDir("", "cfs-test")
 	dir = filepath.FromSlash(dir)
@@ -64,19 +69,42 @@ func setupBucket() (*Bucket, string) {
 		panic(err)
 	}
 
-	return bucket, dir
+	client := &Client{
+		Bucket:  bucket,
+		Storage: newStorage(bucket),
+	}
+
+	return client, bucket, dir
 }
 
-func setupBucketWithFiles() (*Bucket, string) {
-	b, dir := setupBucket()
+func newStorage(bucket *Bucket) Storage {
+	switch os.Getenv("CFS_TEST_STORAGE") {
+	case "gcs":
+		uri, _ := url.Parse("http://storage.googleapis.com/cfs/")
+		storage := &GcsStorage{
+			BucketName: "cfs",
+			CabinetUrl: uri,
+		}
+		err := storage.Init()
+		if err != nil {
+			panic(err)
+		}
+		return storage
+	default:
+		return &FileStorage{CabinetUrl: bucket.CabinetUrl}
+	}
+}
+
+func setupBucketWithFiles() (*Client, *Bucket, string) {
+	c, b, dir := setupBucket()
 	addFile(dir, "hoge", "hoge")
 	addFile(dir, "fuga", "fuga")
 	addFile(dir, "piyo/piyo", "piyo")
 
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	b.UploadCount = 0
-	return b, dir
+	return c, b, dir
 }
 
 func setupBucketFromUrl(url string, location string) *Bucket {
@@ -119,69 +147,69 @@ func addFile(dir, file, content string) {
 }
 
 func TestNewBucket(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge", "fuga")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 1)
 	assertUploadCount(t, b, 1)
 
 	addFile(dir, "fuga", "piyo")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 2)
 	assertUploadCount(t, b, 2)
 
-	b.Finish()
+	c.Finish()
 	assertUploadCount(t, b, 3)
 }
 
 func TestOverwriteFile(t *testing.T) {
-	b, dir := setupBucketWithFiles()
+	c, b, dir := setupBucketWithFiles()
 
 	addFile(dir, "hoge", "piyo")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 3)
 	assertUploadCount(t, b, 0)
 
 	addFile(dir, "hoge", "fuga2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 1)
 
 	addFile(dir, "hoge", "fuga3")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 2)
 
 	addFile(dir, "hoge", "fuga2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 2)
 
 	addFile(dir, filepath.FromSlash("piyo/piyo"), "piyo2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 3)
 
 	addFile(dir, filepath.FromSlash("piyo/piyo"), "piyo2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 3)
 	assertUploadCount(t, b, 3)
 }
 
 func TestCompress(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge", "piyo")
 	addFile(dir, "fuga.raw", "hage")
 	addFile(dir, "piyo/piyo", "piyopiyo")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
-	err := b.Finish()
+	err := c.Finish()
 	if err != nil {
 		t.Errorf("cannot finish bucket")
 		t.Error(err)
@@ -212,22 +240,22 @@ func TestCompress(t *testing.T) {
 }
 
 func TestRawFile(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge.raw", "raw1")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 	if b.Contents["hoge.raw"].Attr != ContentAttribute(0) {
 		t.Errorf("hoge.raw must be raw file")
 	}
 
 	addFile(dir, "hoge.raw", "raw1")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 	if b.Contents["hoge.raw"].Attr != ContentAttribute(0) {
 		t.Errorf("hoge.raw must be raw file")
 	}
 
 	addFile(dir, "fuga.noraw", "raw2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 	if b.Contents["fuga.noraw"].Attr == ContentAttribute(0) {
 		t.Errorf("hoge.noraw must not be raw file")
 	}
@@ -235,13 +263,13 @@ func TestRawFile(t *testing.T) {
 }
 
 func TestTag(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 	b.Tag = "test"
 
 	addFile(dir, "hoge.txt", "hoge")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
-	err := b.Finish()
+	err := c.Finish()
 	if err != nil {
 		t.Errorf("cannot finish bucket")
 		t.Error(err)

@@ -14,10 +14,10 @@ import (
 )
 
 type Server struct {
-	FpRoot    string `json:"root_filepath"`
-	Port      int
-	AdminUser string
-	AdminPass string
+	RootFilepath string `json:"root_filepath"`
+	Port         int
+	AdminUser    string
+	AdminPass    string
 }
 
 func (s *Server) hashPath(hash string) string {
@@ -45,15 +45,15 @@ func (s *Server) versionListFilepath(tag string) string {
 }
 
 func (s *Server) dataFilepath() string {
-	return filepath.Join(s.FpRoot, "data")
+	return filepath.Join(s.RootFilepath, "data")
 }
 
 func (s *Server) tagsFilepath() string {
-	return filepath.Join(s.FpRoot, "tags")
+	return filepath.Join(s.RootFilepath, "tags")
 }
 
 func (s *Server) versionsFilepath() string {
-	return filepath.Join(s.FpRoot, "versions")
+	return filepath.Join(s.RootFilepath, "versions")
 }
 
 func (s *Server) upload(c *gin.Context) {
@@ -263,7 +263,7 @@ func (s *Server) stat(c *gin.Context) {
 		TotalSize int64 `json:"totalSize"`
 		FileCount int   `json:"fileCount"`
 	}
-	err := filepath.Walk(s.FpRoot, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(s.RootFilepath, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -285,7 +285,7 @@ func (s *Server) stat(c *gin.Context) {
 func (s *Server) Start() {
 	r := gin.Default()
 
-	r.StaticFS("/data", http.Dir(filepath.Join(s.FpRoot, "data")))
+	r.StaticFS("/data", http.Dir(filepath.Join(s.RootFilepath, "data")))
 	r.StaticFS("/assets", http.Dir("./assets"))
 
 	var api, ui gin.IRoutes
@@ -293,11 +293,11 @@ func (s *Server) Start() {
 		accounts := gin.Accounts{s.AdminUser: s.AdminPass}
 		api = r.Group("/api", gin.BasicAuth(accounts))
 		ui = r.Group("/ui", gin.BasicAuth(accounts))
-	}else{
+	} else {
 		api = r.Group("/api")
 		ui = r.Group("/ui")
 	}
-	
+
 	{
 		api.POST("/upload/:hash", s.upload)
 		api.POST("/nonexists", s.nonexists)

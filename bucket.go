@@ -7,13 +7,11 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -23,6 +21,10 @@ import (
 
 var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 var Verbose = false
+
+type Storage interface {
+	Upload(filename string, hash string, body []byte, overwrite bool) error
+}
 
 type Bucket struct {
 	Tag         string
@@ -219,189 +221,6 @@ func (b *Bucket) Dump() string {
 
 	return strings.Join(r, "\n") + "\n"
 }
-
-func (b *Bucket) Finish() error {
-	orig_data := []byte(b.Dump())
-	orig_hash := b.Sum(orig_data)
-
-	hash, _, err := b.Upload("*bucket*", orig_data, orig_hash, DefaultContentAttribute())
-	if err != nil {
-		return err
-	}
-	b.Hash = hash
-
-	err = ioutil.WriteFile(filepath.FromSlash(b.Path), orig_data, 0666)
-	if err != nil {
-		return err
-	}
-
-	ioutil.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
-	if Verbose {
-		fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
-	}
-
-	if b.Tag != "" {
-		tag := TagFile{
-			Name:       b.Tag,
-			CreatedAt:  time.Now(),
-			EncryptKey: Option.EncryptKey,
-			EncryptIv:  Option.EncryptIv,
-			Attr:       DefaultContentAttribute(),
-			Hash:       b.Hash,
-		}
-
-		tagBytes, err := json.Marshal(tag)
-		if err != nil {
-			return err
-		}
-
-		_, err = b.post(path.Join("api/tags", b.Tag), tagBytes)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func isHash(str string) bool {
-	if len(str) != 32 {
-		return false
-	}
-	for _, c := range str {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			return false
-		}
-	}
-	return true
-}
-
-func (b *Bucket) Upload(filename string, orig_data []byte, orig_hash string, attr ContentAttribute) (string, int, error) {
-	if !isHash(orig_hash) {
-		return "", 0, fmt.Errorf("invalid hash %s", orig_hash)
-	}
-
-	data := orig_data
-	hash := orig_hash
-	hash_changed := false
-
-	if attr.Compressed() {
-		var buf bytes.Buffer
-		w := zlib.NewWriter(&buf)
-		w.Write(orig_data)
-		w.Close()
-		data = buf.Bytes()
-		hash_changed = true
-	}
-
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(Option.EncryptKey))
-		if err != nil {
-			panic(err)
-		}
-		cfb := cipher.NewCFBEncrypter(block, []byte(Option.EncryptIv))
-		cipher_data := make([]byte, len(data))
-		cfb.XORKeyStream(cipher_data, data)
-		data = cipher_data
-		hash_changed = true
-	}
-
-	if hash_changed {
-		hash = b.Sum(data)
-	}
-
-	err := b.uploadFile(filename, hash, data, false)
-	if err != nil {
-		return "", 0, err
-	}
-
-	return hash, len(data), nil
-}
-
-func (b *Bucket) Decode(data []byte, attr ContentAttribute) ([]byte, error) {
-
-	if attr.Compressed() {
-		var buf bytes.Buffer
-		r, err := zlib.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		r.Read(data)
-		r.Close()
-		data = buf.Bytes()
-	}
-
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(Option.EncryptKey))
-		if err != nil {
-			return nil, err
-		}
-		cfb := cipher.NewCFBEncrypter(block, []byte(Option.EncryptIv))
-		cipher_data := make([]byte, len(data))
-		cfb.XORKeyStream(cipher_data, data)
-		data = cipher_data
-	}
-
-	return data, nil
-}
-
-func (b *Bucket) post(location string, body []byte) ([]byte, error) {
-	cli := &http.Client{}
-
-	url, err := b.CabinetUrl.Parse(location)
-	if err != nil {
-		return nil, fmt.Errorf("cannot parse url %s", location)
-	}
-
-	req, err := http.NewRequest("POST", url.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("cannot create request %s", url.String())
-	}
-
-	req.SetBasicAuth(Option.AdminUser, Option.AdminPass)
-	resp, err := cli.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error request to %s, %s", url.String(), err.Error())
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("response code not 200 OK but %d, %s", resp.StatusCode, url.String())
-	}
-
-	resp_body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read body %s", url.String())
-	}
-
-	return resp_body, nil
-}
-
-func (b *Bucket) uploadFile(filename string, hash string, body []byte, overwrite bool) error {
-
-	nonexists_res, err := b.post("api/nonexists", []byte(hash))
-	if err != nil {
-		return err
-	}
-
-	if len(nonexists_res) == 0 {
-		return nil
-	}
-
-	_, err = b.post(path.Join("api/upload", hash), body)
-	if err != nil {
-		return err
-	}
-
-	b.UploadCount++
-
-	//if Verbose {
-	fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
-	//}
-
-	return nil
-}
-
 func (b *Bucket) GetAttribute(path string) ContentAttribute {
 	var attr = DefaultContentAttribute()
 	// TODO: とりあえずフィルタを固定している
@@ -409,112 +228,6 @@ func (b *Bucket) GetAttribute(path string) ContentAttribute {
 		attr = ContentAttribute(0)
 	}
 	return attr
-}
-
-func (b *Bucket) AddFile(root string, relative string, info os.FileInfo) (bool, error) {
-	fullPath := filepath.Join(root, relative)
-	key := filepath.ToSlash(relative)
-	if Option.Flatten {
-		key = filepath.Base(key)
-	}
-	old, found := b.Contents[key]
-	if found {
-		b.Contents[key] = Content{
-			Path:     old.Path,
-			Hash:     old.Hash,
-			Size:     old.Size,
-			Time:     old.Time,
-			OrigHash: old.OrigHash,
-			OrigSize: old.OrigSize,
-			Attr:     old.Attr,
-			Touched:  true,
-		}
-		if !info.ModTime().After(old.Time) {
-			return false, nil
-		}
-	}
-
-	orig_data, err := ioutil.ReadFile(fullPath)
-	if err != nil {
-		return false, err
-	}
-
-	orig_hash := b.Sum(orig_data)
-	if found && old.OrigHash == orig_hash {
-		return false, nil
-	}
-
-	attr := b.GetAttribute(relative)
-	hash, size, err := b.Upload(relative, orig_data, orig_hash, attr)
-	if err != nil {
-		return false, err
-	}
-
-	//if Verbose {
-	fmt.Printf("changed file %-12s (%s)\n", relative, hash)
-	//}
-
-	b.Contents[key] = Content{
-		Path:     key,
-		Hash:     hash,
-		Size:     size,
-		Time:     info.ModTime(),
-		OrigHash: orig_hash,
-		OrigSize: len(orig_data),
-		Attr:     attr,
-		Touched:  true,
-	}
-	b.changed = true
-
-	return true, nil
-}
-
-func (b *Bucket) AddFiles(root string) error {
-	return filepath.Walk(root, func(path2 string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info == nil {
-			if Verbose {
-				fmt.Printf("%s not found\n", path2)
-			}
-			return nil
-		}
-
-		// TODO: filepath.Matchがちゃんと働かないため、とりあえず対応
-		ext := filepath.Ext(path2)
-		base := filepath.Base(path2)
-		if strings.HasPrefix(base, ".") || strings.HasPrefix(base, "#") ||
-			strings.HasSuffix(base, "~") ||
-			ext == ".meta" || ext == ".manifest" || ext == ".tmx" || ext == ".png" {
-			return nil
-		}
-
-		if path2 != "." {
-			for _, pat := range ExcludePatterns {
-				if match, err := filepath.Match(pat, path2); match || err != nil {
-					if info.Mode().IsDir() {
-						return filepath.SkipDir
-					} else {
-						return nil
-					}
-				}
-			}
-		}
-
-		if !info.Mode().IsDir() {
-			if root == "." || root == path2 {
-				b.AddFile("", path2, info)
-			} else {
-				b.AddFile(root, path2[len(root)+1:], info)
-			}
-		} else {
-			if !Option.Recursive && root != path2 {
-				return filepath.SkipDir
-			}
-		}
-		return nil
-	})
 }
 
 func (b *Bucket) Sync(dir string) error {
@@ -581,10 +294,6 @@ func (b *Bucket) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 	return data, nil
 }
 
-func isWindows() bool {
-	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
-}
-
 func fetch(_url *url.URL) ([]byte, error) {
 	t := &http.Transport{}
 	if isWindows() {
@@ -607,4 +316,8 @@ func fetch(_url *url.URL) ([]byte, error) {
 	}
 
 	return contents, nil
+}
+
+func isWindows() bool {
+	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
 }
