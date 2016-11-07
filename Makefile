@@ -1,6 +1,6 @@
 all: darwin linux windows
 
-.PHONY: all darwin linux windows
+.PHONY: all darwin linux windows test test-file test-gcs
 
 darwin:
 	cd cfssv; GOOS=darwin GOARCH=amd64 go build -o ../bin/darwin/cfssv
@@ -13,3 +13,11 @@ linux:
 windows:
 	cd cfssv; GOOS=windows GOARCH=amd64 go build -o ../bin/windows/cfssv.exe
 	cd cfsctl; GOOS=windows GOARCH=amd64 go build -o ../bin/windows/cfsctl.exe
+
+test: test-file test-gcs
+
+test-file:
+	go test
+
+test-gcs:
+	CFS_TEST_STORAGE=gcs go test
