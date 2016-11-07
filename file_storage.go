@@ -14,6 +14,10 @@ type FileStorage struct {
 	CabinetUrl *url.URL
 }
 
+func (s *FileStorage) Init() error {
+	return nil
+}
+
 func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {
 
 	nonexists_res, err := s.post("api/nonexists", []byte(hash))

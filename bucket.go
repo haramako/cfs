@@ -23,6 +23,7 @@ var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 var Verbose = false
 
 type Storage interface {
+	Init() error
 	Upload(filename string, hash string, body []byte, overwrite bool) error
 }
 

@@ -7,12 +7,54 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
+type uploadRequest struct {
+	Filename string
+	Hash     string
+	Data     []byte
+}
+
 type Client struct {
-	Bucket  *Bucket
-	Storage Storage
+	Bucket    *Bucket
+	Storage   Storage
+	MaxWorker int
+	waitGroup sync.WaitGroup
+	queue     chan uploadRequest
+}
+
+func (c *Client) Init() error {
+	if c.MaxWorker == 0 {
+		c.MaxWorker = 32
+	}
+
+	err := c.Storage.Init()
+	if err != nil {
+		return err
+	}
+
+	c.queue = make(chan uploadRequest, c.MaxWorker)
+
+	c.waitGroup.Add(c.MaxWorker)
+	for i := 0; i < c.MaxWorker; i++ {
+		go c.uploadWorker()
+	}
+
+	return nil
+}
+
+func (c *Client) uploadWorker() {
+	defer c.waitGroup.Done()
+
+	for req := range c.queue {
+		err := c.Storage.Upload(req.Filename, req.Hash, req.Data, false)
+		if err != nil {
+			fmt.Println(err)
+			//return "", 0, err
+		}
+	}
 }
 
 func (c *Client) Upload(filename string, orig_data []byte, orig_hash string, attr ContentAttribute) (string, int, error) {
@@ -27,10 +69,7 @@ func (c *Client) Upload(filename string, orig_data []byte, orig_hash string, att
 		hash = c.Bucket.Sum(data)
 	}
 
-	err = c.Storage.Upload(filename, hash, data, false)
-	if err != nil {
-		return "", 0, err
-	}
+	c.queue <- uploadRequest{Filename: filename, Hash: hash, Data: data}
 
 	return hash, len(data), nil
 }
@@ -190,6 +229,9 @@ func (c *Client) Finish() error {
 			}
 		*/
 	}
+
+	close(c.queue)
+	c.waitGroup.Wait()
 
 	return nil
 }

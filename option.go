@@ -14,9 +14,16 @@ type OptionInfo struct {
 	Compress   bool
 	EncryptKey string
 	EncryptIv  string
-	Cabinet    string
-	AdminUser  string
-	AdminPass  string
+
+	// CFS server setting
+	Cabinet string
+
+	// Google Cloud Storage setting
+	GcsBucket string
+
+	// Server settings
+	AdminUser string
+	AdminPass string
 }
 
 var Option = &OptionInfo{

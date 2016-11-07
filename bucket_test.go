@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +72,7 @@ func setupBucket() (*Client, *Bucket, string) {
 		Bucket:  bucket,
 		Storage: newStorage(bucket),
 	}
+	client.Init()
 
 	return client, bucket, dir
 }
@@ -80,10 +80,8 @@ func setupBucket() (*Client, *Bucket, string) {
 func newStorage(bucket *Bucket) Storage {
 	switch os.Getenv("CFS_TEST_STORAGE") {
 	case "gcs":
-		uri, _ := url.Parse("http://storage.googleapis.com/cfs/")
 		storage := &GcsStorage{
 			BucketName: "cfs",
-			CabinetUrl: uri,
 		}
 		err := storage.Init()
 		if err != nil {

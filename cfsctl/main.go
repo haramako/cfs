@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs"
+	"net/url"
 	"os"
 )
 
@@ -70,6 +71,19 @@ func loadConfig(c *cli.Context) {
 	}
 }
 
+func createStorage() cfs.Storage {
+	if cfs.Option.GcsBucket != "" {
+		return &cfs.GcsStorage{
+			BucketName: cfs.Option.GcsBucket,
+		}
+	} else {
+		uri, _ := url.Parse(cfs.Option.Cabinet)
+		return &cfs.FileStorage{
+			CabinetUrl: uri,
+		}
+	}
+}
+
 func doUpload(c *cli.Context) {
 	loadConfig(c)
 
@@ -85,8 +99,21 @@ func doUpload(c *cli.Context) {
 		args = []string{"."}
 	}
 
+	storage := createStorage()
+
+	client := &cfs.Client{
+		Storage: storage,
+		Bucket:  bucket,
+	}
+
+	err = client.Init()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	for _, path := range args {
-		err = bucket.AddFiles(path)
+		err = client.AddFiles(path)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -94,7 +121,7 @@ func doUpload(c *cli.Context) {
 	}
 
 	bucket.RemoveUntouched()
-	err = bucket.Finish()
+	err = client.Finish()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
