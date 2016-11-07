@@ -12,8 +12,8 @@ import (
 func main() {
 
 	sv := &cfs.Server{
-		FpRoot: ".",
-		Port:   8086,
+		RootFilepath: ".",
+		Port:         8086,
 	}
 
 	conf, err := ioutil.ReadFile("cfssv.conf")
