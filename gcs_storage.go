@@ -8,14 +8,11 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/storage/v1"
 	"log"
-	//"net/url"
-	//"os"
 )
 
 type GcsStorage struct {
 	BucketName string
-	//CabinetUrl *url.URL
-	service *storage.Service
+	service    *storage.Service
 }
 
 func (s *GcsStorage) Init() error {
@@ -37,8 +34,18 @@ func (s *GcsStorage) Init() error {
 }
 
 func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {
-	object := &storage.Object{Name: "data/" + hashPath(hash)}
-	_, err := s.service.Objects.Insert(s.BucketName, object).IfGenerationMatch(0).Media(bytes.NewBuffer(body)).Do()
+	path := "data/" + hashPath(hash)
+	object := &storage.Object{Name: path}
+
+	_, err := s.service.Objects.Get(s.BucketName, path).Do()
+	if err == nil {
+		// file already exists.
+		return nil
+	}
+
+	// no file! lets make a file
+
+	_, err = s.service.Objects.Insert(s.BucketName, object).IfGenerationMatch(0).Media(bytes.NewBuffer(body)).Do()
 	if err != nil && googleapi.IsNotModified(err) {
 		fmt.Println(err)
 		return err
