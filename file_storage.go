@@ -3,16 +3,30 @@ package cfs
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 )
 
 type FileStorage struct {
 	CabinetPath string
+	rootUrl     *url.URL
 }
 
-func (s *FileStorage) Init() error {
-	return nil
+func NewFileStorage(cabinetPath string) (*FileStorage, error) {
+	s := &FileStorage{
+		CabinetPath: cabinetPath,
+	}
+	rootUrl, err := url.Parse("file://" + s.CabinetPath + "/")
+	if err != nil {
+		return nil, err
+	}
+	s.rootUrl = rootUrl
+	return s, nil
+}
+
+func (s *FileStorage) DownloaderUrl() *url.URL {
+	return s.rootUrl
 }
 
 func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {

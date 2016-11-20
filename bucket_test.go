@@ -3,7 +3,6 @@ package cfs
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net/url"
 	"os"
 	"os/exec"
@@ -14,7 +13,6 @@ import (
 )
 
 var Printf = fmt.Printf // avoid error
-var tempDir = ""
 var timeCount = int64(0)
 
 func TestMain(m *testing.M) {
@@ -22,23 +20,23 @@ func TestMain(m *testing.M) {
 	Option.EncryptIv = "1234567890123456"
 	Option.AdminUser = "admin"
 	Option.AdminPass = "pass"
-	Option.Cabinet = "http://localhost:9999/"
 
-	rand.Seed(time.Now().UnixNano())
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true
 	}
-	var err error
-	tempDir, err = ioutil.TempDir("", "cfs-work")
-	if err != nil {
-		panic(err)
-	}
 
-	switch os.Getenv("CFS_TEST_STORAGE") {
-	case "gcs":
-		Option.Cabinet = "http://storage.googleapis.com/cfs/"
-	case "cfs":
-		tempDir = "/tmp/hogehoge"
+	initServer()
+
+	os.Exit(m.Run())
+}
+
+func initServer() {
+	if os.Getenv("CFS_TEST_STORAGE") == "cfs" {
+		tempDir, err := ioutil.TempDir("", "cfs-cfssv")
+		if err != nil {
+			panic(err)
+		}
+
 		sv := &Server{
 			RootFilepath: tempDir,
 			Port:         9999,
@@ -51,11 +49,7 @@ func TestMain(m *testing.M) {
 		}
 		go sv.Start()
 		time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
-	default:
-		// DO NOTHING
 	}
-
-	os.Exit(m.Run())
 }
 
 func setupBucket() (*Client, *Bucket, string) {
@@ -71,9 +65,11 @@ func setupBucket() (*Client, *Bucket, string) {
 		panic(err)
 	}
 
+	storage := newStorage(bucket)
+
 	client := &Client{
 		Bucket:  bucket,
-		Storage: newStorage(bucket),
+		Storage: storage,
 	}
 	client.Init()
 
@@ -81,37 +77,25 @@ func setupBucket() (*Client, *Bucket, string) {
 }
 
 func newStorage(bucket *Bucket) Storage {
+	var uri string
 	switch os.Getenv("CFS_TEST_STORAGE") {
 	case "gcs":
-		storage := &GcsStorage{
-			BucketName: "cfs",
-		}
-		err := storage.Init()
-		if err != nil {
-			panic(err)
-		}
-		return storage
+		uri = "gs://cfs"
 	case "cfs":
-		return &CfsStorage{CabinetUrl: bucket.CabinetUrl}
+		uri = "cfs://localhost:9999/"
 	default:
 		tempDir, err := ioutil.TempDir("", "cfs-file")
 		if err != nil {
 			panic(err)
 		}
-		storage := &FileStorage{
-			CabinetPath: tempDir,
-		}
-		Option.Cabinet = "file://" + tempDir + "/"
-		bucket.CabinetUrl, err = url.Parse("file://" + tempDir + "/")
-		if err != nil {
-			panic(err)
-		}
-		err = storage.Init()
-		if err != nil {
-			panic(err)
-		}
-		return storage
+		uri = "file:///" + tempDir + "/"
 	}
+
+	storage, err := StorageFromString(uri)
+	if err != nil {
+		panic(err)
+	}
+	return storage
 }
 
 func setupBucketWithFiles() (*Client, *Bucket, string) {
@@ -126,12 +110,17 @@ func setupBucketWithFiles() (*Client, *Bucket, string) {
 	return c, b, dir
 }
 
-func setupBucketFromUrl(url string, location string) *Bucket {
-	bucket, err := BucketFromUrl(url, location)
+func setupBucketFromUrl(baseUrl *url.URL, location string) (*Downloader, *Bucket) {
+	downloader, err := NewDownloader(baseUrl.String())
 	if err != nil {
 		panic(err)
 	}
-	return bucket
+
+	bucket, err := downloader.LoadBucket(location)
+	if err != nil {
+		panic(err)
+	}
+	return downloader, bucket
 }
 
 func assertContents(t *testing.T, b *Bucket, n int) {
@@ -235,7 +224,7 @@ func TestCompress(t *testing.T) {
 		return
 	}
 
-	b2 := setupBucketFromUrl(b.CabinetUrl.String(), b.Hash)
+	d, b2 := setupBucketFromUrl(c.Storage.DownloaderUrl(), b.Hash)
 	if b2 == nil {
 		return // なにもしない
 	}
@@ -245,7 +234,7 @@ func TestCompress(t *testing.T) {
 		panic(err)
 	}
 
-	err = b2.Sync(temp)
+	err = d.Sync(b2, temp)
 	if err != nil {
 		t.Error(err)
 		return

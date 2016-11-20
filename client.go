@@ -30,11 +30,6 @@ func (c *Client) Init() error {
 		c.MaxWorker = 32
 	}
 
-	err := c.Storage.Init()
-	if err != nil {
-		return err
-	}
-
 	c.queue = make(chan uploadRequest, c.MaxWorker)
 
 	c.waitGroup.Add(c.MaxWorker)

@@ -15,11 +15,10 @@ type OptionInfo struct {
 	EncryptKey string
 	EncryptIv  string
 
-	// CFS server setting
+	// common setting
 	Cabinet string
 
 	// Google Cloud Storage setting
-	GcsBucket string
 
 	// Server settings
 	AdminUser string

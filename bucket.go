@@ -1,17 +1,10 @@
 package cfs
 
 import (
-	"bytes"
-	"compress/zlib"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -22,20 +15,13 @@ import (
 var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 var Verbose = false
 
-type Storage interface {
-	Init() error
-	Upload(filename string, hash string, body []byte, overwrite bool) error
-}
-
 type Bucket struct {
 	Tag         string
 	Path        string
 	Hash        string
 	ExcludeList []string
 	Contents    map[string]Content
-	CabinetUrl  *url.URL
 	changed     bool
-	BaseUrl     *url.URL
 	location    string
 	HashType    string
 	UploadCount int
@@ -79,16 +65,10 @@ func (c ContentAttribute) Crypted() bool {
 }
 
 func BucketFromFile(path string) (*Bucket, error) {
-	cabinetUrl, err := url.Parse(Option.Cabinet)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cabinet url '%s'", Option.Cabinet)
-	}
-
 	b := &Bucket{
-		Path:       path,
-		Contents:   make(map[string]Content),
-		CabinetUrl: cabinetUrl,
-		HashType:   "md5",
+		Path:     path,
+		Contents: make(map[string]Content),
+		HashType: "md5",
 	}
 	data, err := ioutil.ReadFile(filepath.FromSlash(path))
 	if err == nil {
@@ -100,36 +80,6 @@ func BucketFromFile(path string) (*Bucket, error) {
 			return nil, err
 		}
 	}
-	return b, nil
-}
-
-func BucketFromUrl(base_rawurl string, location string) (*Bucket, error) {
-	base_url, err := url.Parse(base_rawurl)
-	if err != nil {
-		return nil, err
-	}
-
-	b := &Bucket{
-		Contents: make(map[string]Content),
-		BaseUrl:  base_url,
-		location: location,
-		HashType: "md5",
-	}
-
-	var body []byte
-	if !isHash(location) {
-		return nil, fmt.Errorf("%s is not hash", location)
-	}
-	body, err = b.Fetch(location, DefaultContentAttribute())
-	if err != nil {
-		return nil, err
-	}
-
-	err = b.Parse(body)
-	if err != nil {
-		return nil, err
-	}
-
 	return b, nil
 }
 
@@ -229,96 +179,4 @@ func (b *Bucket) GetAttribute(path string) ContentAttribute {
 		attr = ContentAttribute(0)
 	}
 	return attr
-}
-
-func (b *Bucket) Sync(dir string) error {
-	for _, c := range b.Contents {
-		if Verbose {
-			fmt.Printf("downloading %s\n", c.Path)
-		}
-
-		data, err := b.Fetch(c.Hash, c.Attr)
-		if err != nil {
-			return err
-		}
-
-		err = os.MkdirAll(filepath.Dir(filepath.Join(dir, filepath.FromSlash(c.Path))), 0777)
-		if err != nil {
-			return err
-		}
-
-		err = ioutil.WriteFile(filepath.Join(dir, filepath.FromSlash(c.Path)), data, 0666)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (b *Bucket) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
-	if !isHash(hash) {
-		return nil, fmt.Errorf("cannot fetch data, %s is not a hash", hash)
-	}
-
-	fetch_url, err := b.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := fetch(fetch_url)
-	if err != nil {
-		return nil, err
-	}
-
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(Option.EncryptKey))
-		if err != nil {
-			panic(err)
-		}
-		cfb := cipher.NewCFBDecrypter(block, []byte(Option.EncryptIv))
-		plain_data := make([]byte, len(data))
-		cfb.XORKeyStream(plain_data, data)
-		data = plain_data
-	}
-
-	if attr.Compressed() {
-		r, err := zlib.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		data, err = ioutil.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return data, nil
-}
-
-func fetch(_url *url.URL) ([]byte, error) {
-	t := &http.Transport{}
-	if isWindows() {
-		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("")))
-	} else {
-		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
-	}
-	c := &http.Client{Transport: t}
-
-	res, err := c.Get(_url.String())
-	if err != nil {
-		return nil, err
-	}
-
-	defer res.Body.Close()
-
-	contents, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return contents, nil
-}
-
-func isWindows() bool {
-	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
 }

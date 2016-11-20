@@ -3,34 +3,47 @@ package cfs
 import (
 	"bytes"
 	"fmt"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/storage/v1"
-	"log"
+	"net/url"
 )
 
 type GcsStorage struct {
 	BucketName string
 	service    *storage.Service
+	cabinetUrl *url.URL
 }
 
-func (s *GcsStorage) Init() error {
-	//os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "gcs-key.json")
+func NewGcsStorage(bucketName string) (*GcsStorage, error) {
+	s := &GcsStorage{
+		BucketName: bucketName,
+	}
 
 	client, err := google.DefaultClient(context.Background(), storage.DevstorageFullControlScope)
 	if err != nil {
-		log.Fatalf("Unable to get default client: %v", err)
+		return nil, errors.Wrap(err, "Unable to get default gs client")
 	}
 
 	service, err := storage.New(client)
 	if err != nil {
-		log.Fatalf("Unable to create storage service: %v", err)
+		return nil, errors.Wrap(err, "Unable to create storage service")
 	}
 
 	s.service = service
 
-	return nil
+	s.cabinetUrl, err = url.Parse("http://storage.googleapis.com/" + s.BucketName + "/")
+	if err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
+
+func (s *GcsStorage) DownloaderUrl() *url.URL {
+	return s.cabinetUrl
 }
 
 func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {

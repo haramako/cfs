@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs"
-	"net/url"
 	"os"
 )
 
@@ -71,19 +70,6 @@ func loadConfig(c *cli.Context) {
 	}
 }
 
-func createStorage() cfs.Storage {
-	if cfs.Option.GcsBucket != "" {
-		return &cfs.GcsStorage{
-			BucketName: cfs.Option.GcsBucket,
-		}
-	} else {
-		uri, _ := url.Parse(cfs.Option.Cabinet)
-		return &cfs.CfsStorage{
-			CabinetUrl: uri,
-		}
-	}
-}
-
 func doUpload(c *cli.Context) {
 	loadConfig(c)
 
@@ -99,7 +85,11 @@ func doUpload(c *cli.Context) {
 		args = []string{"."}
 	}
 
-	storage := createStorage()
+	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	client := &cfs.Client{
 		Storage: storage,
@@ -140,20 +130,25 @@ func doSync(c *cli.Context) {
 	loadConfig(c)
 
 	var args = c.Args()
-	if len(args) < 3 {
-		panic("need 3 arguments")
+	if len(args) != 3 {
+		panic("need just 3 arguments")
 	}
 
 	baseUrl := args[0]
 	location := args[1]
 	dir := args[2]
 
-	bucket, err := cfs.BucketFromUrl(baseUrl, location)
+	downloader, err := cfs.NewDownloader(baseUrl)
 	if err != nil {
 		panic(err)
 	}
 
-	err = bucket.Sync(dir)
+	bucket, err := downloader.LoadBucket(location)
+	if err != nil {
+		panic(err)
+	}
+
+	err = downloader.Sync(bucket, dir)
 	if err != nil {
 		panic(err)
 	}

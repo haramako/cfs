@@ -14,8 +14,15 @@ type CfsStorage struct {
 	CabinetUrl *url.URL
 }
 
-func (s *CfsStorage) Init() error {
-	return nil
+func NewCfsStorage(cabinetUrl *url.URL) (*CfsStorage, error) {
+	s := &CfsStorage{
+		CabinetUrl: cabinetUrl,
+	}
+	return s, nil
+}
+
+func (s *CfsStorage) DownloaderUrl() *url.URL {
+	return s.CabinetUrl
 }
 
 func (s *CfsStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {

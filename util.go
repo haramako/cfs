@@ -6,7 +6,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"io"
+	"os"
 )
+
+func isWindows() bool {
+	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
+}
 
 func isHash(str string) bool {
 	if len(str) != 32 {
