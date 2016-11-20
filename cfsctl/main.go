@@ -78,7 +78,7 @@ func createStorage() cfs.Storage {
 		}
 	} else {
 		uri, _ := url.Parse(cfs.Option.Cabinet)
-		return &cfs.FileStorage{
+		return &cfs.CfsStorage{
 			CabinetUrl: uri,
 		}
 	}

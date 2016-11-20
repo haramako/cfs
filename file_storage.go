@@ -1,17 +1,14 @@
 package cfs
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	//"net/url"
-	"net/url"
-	"path"
+	"os"
+	"path/filepath"
 )
 
 type FileStorage struct {
-	CabinetUrl *url.URL
+	CabinetPath string
 }
 
 func (s *FileStorage) Init() error {
@@ -19,58 +16,32 @@ func (s *FileStorage) Init() error {
 }
 
 func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {
+	if !isHash(hash) {
+		return fmt.Errorf("%v is not hash", hash)
+	}
 
-	nonexists_res, err := s.post("api/nonexists", []byte(hash))
+	dataDir := filepath.Join(s.CabinetPath, "data")
+	dir := filepath.Join(dataDir, hash[0:2])
+	file := filepath.Join(dir, hash[2:])
+
+	err := os.MkdirAll(dir, 0777)
 	if err != nil {
 		return err
 	}
 
-	if len(nonexists_res) == 0 {
+	_, err = os.Stat(file)
+	if os.IsExist(err) {
 		return nil
 	}
 
-	_, err = s.post(path.Join("api/upload", hash), body)
+	err = ioutil.WriteFile(file, body, 0777)
 	if err != nil {
 		return err
 	}
-
-	//b.UploadCount++
 
 	//if Verbose {
 	fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
 	//}
 
 	return nil
-}
-
-func (s *FileStorage) post(location string, body []byte) ([]byte, error) {
-	cli := &http.Client{}
-
-	url, err := s.CabinetUrl.Parse(location)
-	if err != nil {
-		return nil, fmt.Errorf("cannot parse url %s", location)
-	}
-
-	req, err := http.NewRequest("POST", url.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("cannot create request %s", url.String())
-	}
-
-	req.SetBasicAuth(Option.AdminUser, Option.AdminPass)
-	resp, err := cli.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error request to %s, %s", url.String(), err.Error())
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("response code not 200 OK but %d, %s", resp.StatusCode, url.String())
-	}
-
-	resp_body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read body %s", url.String())
-	}
-
-	return resp_body, nil
 }

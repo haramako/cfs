@@ -14,10 +14,13 @@ windows:
 	cd cfssv; GOOS=windows GOARCH=amd64 go build -o ../bin/windows/cfssv.exe
 	cd cfsctl; GOOS=windows GOARCH=amd64 go build -o ../bin/windows/cfsctl.exe
 
-test: test-file test-gcs
+test: test-file test-cfs test-gcs
 
 test-file:
 	go test
+
+test-cfs:
+	CFS_TEST_STORAGE=cfs go test
 
 test-gcs:
 	CFS_TEST_STORAGE=gcs go test

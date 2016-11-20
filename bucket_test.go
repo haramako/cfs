@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +37,7 @@ func TestMain(m *testing.M) {
 	switch os.Getenv("CFS_TEST_STORAGE") {
 	case "gcs":
 		Option.Cabinet = "http://storage.googleapis.com/cfs/"
-	default:
+	case "cfs":
 		tempDir = "/tmp/hogehoge"
 		sv := &Server{
 			RootFilepath: tempDir,
@@ -50,6 +51,8 @@ func TestMain(m *testing.M) {
 		}
 		go sv.Start()
 		time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
+	default:
+		// DO NOTHING
 	}
 
 	os.Exit(m.Run())
@@ -88,8 +91,26 @@ func newStorage(bucket *Bucket) Storage {
 			panic(err)
 		}
 		return storage
+	case "cfs":
+		return &CfsStorage{CabinetUrl: bucket.CabinetUrl}
 	default:
-		return &FileStorage{CabinetUrl: bucket.CabinetUrl}
+		tempDir, err := ioutil.TempDir("", "cfs-file")
+		if err != nil {
+			panic(err)
+		}
+		storage := &FileStorage{
+			CabinetPath: tempDir,
+		}
+		Option.Cabinet = "file://" + tempDir + "/"
+		bucket.CabinetUrl, err = url.Parse("file://" + tempDir + "/")
+		if err != nil {
+			panic(err)
+		}
+		err = storage.Init()
+		if err != nil {
+			panic(err)
+		}
+		return storage
 	}
 }
 
