@@ -1,10 +1,6 @@
 package cfs
 
 import (
-	"bytes"
-	"compress/zlib"
-	"crypto/aes"
-	"crypto/cipher"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -48,38 +44,6 @@ func TagFileFromFile(tag_filepath string) (*TagFile, error) {
 	}
 
 	return &tag, nil
-}
-
-func decode(data []byte, encrypt_key string, encrypt_iv string, attr ContentAttribute) ([]byte, error) {
-
-	if attr.Compressed() {
-		r, err := zlib.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-
-		buf := bytes.NewBuffer(nil)
-		_, err = io.Copy(buf, r)
-		if err != nil {
-			return nil, err
-		}
-
-		r.Close()
-		data = buf.Bytes()
-	}
-
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(encrypt_key))
-		if err != nil {
-			return nil, err
-		}
-		cfb := cipher.NewCFBEncrypter(block, []byte(encrypt_iv))
-		cipher_data := make([]byte, len(data))
-		cfb.XORKeyStream(cipher_data, data)
-		data = cipher_data
-	}
-
-	return data, nil
 }
 
 func (t *TagFile) Bucket(sv *Server) (*Bucket, error) {

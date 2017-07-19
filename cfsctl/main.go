@@ -85,8 +85,25 @@ func doUpload(c *cli.Context) {
 		args = []string{"."}
 	}
 
+	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	client := &cfs.Client{
+		Storage: storage,
+		Bucket:  bucket,
+	}
+
+	err = client.Init()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	for _, path := range args {
-		err = bucket.AddFiles(path)
+		err = client.AddFiles(path)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -94,7 +111,7 @@ func doUpload(c *cli.Context) {
 	}
 
 	bucket.RemoveUntouched()
-	err = bucket.Finish()
+	err = client.Finish()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -113,20 +130,25 @@ func doSync(c *cli.Context) {
 	loadConfig(c)
 
 	var args = c.Args()
-	if len(args) < 3 {
-		panic("need 3 arguments")
+	if len(args) != 3 {
+		panic("need just 3 arguments")
 	}
 
 	baseUrl := args[0]
 	location := args[1]
 	dir := args[2]
 
-	bucket, err := cfs.BucketFromUrl(baseUrl, location)
+	downloader, err := cfs.NewDownloader(baseUrl)
 	if err != nil {
 		panic(err)
 	}
 
-	err = bucket.Sync(dir)
+	bucket, err := downloader.LoadBucket(location)
+	if err != nil {
+		panic(err)
+	}
+
+	err = downloader.Sync(bucket, dir)
 	if err != nil {
 		panic(err)
 	}

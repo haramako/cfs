@@ -3,7 +3,7 @@ package cfs
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +13,6 @@ import (
 )
 
 var Printf = fmt.Printf // avoid error
-var tempDir = ""
 var timeCount = int64(0)
 
 func TestMain(m *testing.M) {
@@ -21,37 +20,39 @@ func TestMain(m *testing.M) {
 	Option.EncryptIv = "1234567890123456"
 	Option.AdminUser = "admin"
 	Option.AdminPass = "pass"
-	Option.Cabinet = "http://localhost:9999/"
 
-	rand.Seed(time.Now().UnixNano())
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true
 	}
-	var err error
-	tempDir, err = ioutil.TempDir("", "cfs-work")
-	if err != nil {
-		panic(err)
-	}
 
-	tempDir = "/tmp/hogehoge"
-	sv := &Server{
-		FpRoot:    tempDir,
-		Port:      9999,
-		AdminUser: "admin",
-		AdminPass: "pass",
-	}
-	err = sv.Init()
-	if err != nil {
-		panic(err)
-	}
-	go sv.Start()
-
-	time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
+	initServer()
 
 	os.Exit(m.Run())
 }
 
-func setupBucket() (*Bucket, string) {
+func initServer() {
+	if os.Getenv("CFS_TEST_STORAGE") == "cfs" {
+		tempDir, err := ioutil.TempDir("", "cfs-cfssv")
+		if err != nil {
+			panic(err)
+		}
+
+		sv := &Server{
+			RootFilepath: tempDir,
+			Port:         9999,
+			AdminUser:    "admin",
+			AdminPass:    "pass",
+		}
+		err = sv.Init()
+		if err != nil {
+			panic(err)
+		}
+		go sv.Start()
+		time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
+	}
+}
+
+func setupBucket() (*Client, *Bucket, string) {
 
 	dir, err := ioutil.TempDir("", "cfs-test")
 	dir = filepath.FromSlash(dir)
@@ -64,27 +65,62 @@ func setupBucket() (*Bucket, string) {
 		panic(err)
 	}
 
-	return bucket, dir
+	storage := newStorage(bucket)
+
+	client := &Client{
+		Bucket:  bucket,
+		Storage: storage,
+	}
+	client.Init()
+
+	return client, bucket, dir
 }
 
-func setupBucketWithFiles() (*Bucket, string) {
-	b, dir := setupBucket()
+func newStorage(bucket *Bucket) Storage {
+	var uri string
+	switch os.Getenv("CFS_TEST_STORAGE") {
+	case "gcs":
+		uri = "gs://cfs"
+	case "cfs":
+		uri = "cfs://localhost:9999/"
+	default:
+		tempDir, err := ioutil.TempDir("", "cfs-file")
+		if err != nil {
+			panic(err)
+		}
+		uri = "file:///" + tempDir + "/"
+	}
+
+	storage, err := StorageFromString(uri)
+	if err != nil {
+		panic(err)
+	}
+	return storage
+}
+
+func setupBucketWithFiles() (*Client, *Bucket, string) {
+	c, b, dir := setupBucket()
 	addFile(dir, "hoge", "hoge")
 	addFile(dir, "fuga", "fuga")
 	addFile(dir, "piyo/piyo", "piyo")
 
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	b.UploadCount = 0
-	return b, dir
+	return c, b, dir
 }
 
-func setupBucketFromUrl(url string, location string) *Bucket {
-	bucket, err := BucketFromUrl(url, location)
+func setupBucketFromUrl(baseUrl *url.URL, location string) (*Downloader, *Bucket) {
+	downloader, err := NewDownloader(baseUrl.String())
 	if err != nil {
 		panic(err)
 	}
-	return bucket
+
+	bucket, err := downloader.LoadBucket(location)
+	if err != nil {
+		panic(err)
+	}
+	return downloader, bucket
 }
 
 func assertContents(t *testing.T, b *Bucket, n int) {
@@ -119,76 +155,76 @@ func addFile(dir, file, content string) {
 }
 
 func TestNewBucket(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge", "fuga")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 1)
 	assertUploadCount(t, b, 1)
 
 	addFile(dir, "fuga", "piyo")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 2)
 	assertUploadCount(t, b, 2)
 
-	b.Finish()
+	c.Finish()
 	assertUploadCount(t, b, 3)
 }
 
 func TestOverwriteFile(t *testing.T) {
-	b, dir := setupBucketWithFiles()
+	c, b, dir := setupBucketWithFiles()
 
 	addFile(dir, "hoge", "piyo")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 3)
 	assertUploadCount(t, b, 0)
 
 	addFile(dir, "hoge", "fuga2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 1)
 
 	addFile(dir, "hoge", "fuga3")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 2)
 
 	addFile(dir, "hoge", "fuga2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 2)
 
 	addFile(dir, filepath.FromSlash("piyo/piyo"), "piyo2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertUploadCount(t, b, 3)
 
 	addFile(dir, filepath.FromSlash("piyo/piyo"), "piyo2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
 	assertContents(t, b, 3)
 	assertUploadCount(t, b, 3)
 }
 
 func TestCompress(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge", "piyo")
 	addFile(dir, "fuga.raw", "hage")
 	addFile(dir, "piyo/piyo", "piyopiyo")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
-	err := b.Finish()
+	err := c.Finish()
 	if err != nil {
 		t.Errorf("cannot finish bucket")
 		t.Error(err)
 		return
 	}
 
-	b2 := setupBucketFromUrl(b.CabinetUrl.String(), b.Hash)
+	d, b2 := setupBucketFromUrl(c.Storage.DownloaderUrl(), b.Hash)
 	if b2 == nil {
 		return // なにもしない
 	}
@@ -198,7 +234,7 @@ func TestCompress(t *testing.T) {
 		panic(err)
 	}
 
-	err = b2.Sync(temp)
+	err = d.Sync(b2, temp)
 	if err != nil {
 		t.Error(err)
 		return
@@ -212,22 +248,22 @@ func TestCompress(t *testing.T) {
 }
 
 func TestRawFile(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge.raw", "raw1")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 	if b.Contents["hoge.raw"].Attr != ContentAttribute(0) {
 		t.Errorf("hoge.raw must be raw file")
 	}
 
 	addFile(dir, "hoge.raw", "raw1")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 	if b.Contents["hoge.raw"].Attr != ContentAttribute(0) {
 		t.Errorf("hoge.raw must be raw file")
 	}
 
 	addFile(dir, "fuga.noraw", "raw2")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 	if b.Contents["fuga.noraw"].Attr == ContentAttribute(0) {
 		t.Errorf("hoge.noraw must not be raw file")
 	}
@@ -235,13 +271,13 @@ func TestRawFile(t *testing.T) {
 }
 
 func TestTag(t *testing.T) {
-	b, dir := setupBucket()
+	c, b, dir := setupBucket()
 	b.Tag = "test"
 
 	addFile(dir, "hoge.txt", "hoge")
-	b.AddFiles(dir)
+	c.AddFiles(dir)
 
-	err := b.Finish()
+	err := c.Finish()
 	if err != nil {
 		t.Errorf("cannot finish bucket")
 		t.Error(err)
