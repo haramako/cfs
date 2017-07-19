@@ -3,12 +3,13 @@ package cfs
 import (
 	"bytes"
 	"fmt"
+	"net/url"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/storage/v1"
-	"net/url"
 )
 
 type GcsStorage struct {

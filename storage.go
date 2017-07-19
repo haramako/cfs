@@ -24,6 +24,12 @@ func StorageFromUrl(cabinetUrl *url.URL) (Storage, error) {
 			return nil, err
 		}
 		return storage, nil
+	case "s3":
+		storage, err := NewS3Storage(cabinetUrl.Host)
+		if err != nil {
+			return nil, err
+		}
+		return storage, nil
 	case "file":
 		return NewFileStorage(cabinetUrl.Path)
 	default:

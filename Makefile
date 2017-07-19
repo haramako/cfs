@@ -24,3 +24,6 @@ test-cfs:
 
 test-gcs:
 	CFS_TEST_STORAGE=gcs go test
+
+test-s3:
+	CFS_TEST_STORAGE=s3 go test
