@@ -130,7 +130,7 @@ func doUpload(c *cli.Context) {
 			absDirs = append(absDirs, absDir)
 		}
 		filename := cfs.Option.Cabinet + ":" + cwd + ":" + strings.Join(absDirs, ":")
-		filename = strings.Replace(filename, "/", "__", -1)
+		filename = strings.Replace(filename, string(os.PathSeparator), "__", -1)
 		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
