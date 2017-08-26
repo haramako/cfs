@@ -3,6 +3,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,6 +99,11 @@ var UploadCommand = cli.Command{
 			Value: "", // 指定されない場合は、自動で設定される
 			Usage: "bucket file name",
 		},
+		cli.StringFlag{
+			Name:  "output, o",
+			Value: "",
+			Usage: "hash output file",
+		},
 	},
 }
 
@@ -109,6 +115,7 @@ func doUpload(c *cli.Context) {
 		args = []string{"."}
 	}
 
+	output := c.String("output")
 	bucketPath := c.String("bucket")
 	if bucketPath == "" {
 		// bucketが指定されていない場合は、自動でパスを作成する
@@ -146,6 +153,10 @@ func doUpload(c *cli.Context) {
 
 	bucket.RemoveUntouched()
 	check(client.Finish())
+
+	if output != "" {
+		check(ioutil.WriteFile(output, []byte(bucket.Hash), 0777))
+	}
 }
 
 var SyncCommand = cli.Command{
@@ -181,6 +192,13 @@ var MergeCommand = cli.Command{
 	Usage:     "merge buckets",
 	Action:    doMerge,
 	ArgsUsage: "output-tag location [...]",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "output, o",
+			Value: "",
+			Usage: "hash output file",
+		},
+	},
 }
 
 func doMerge(c *cli.Context) {
@@ -191,6 +209,8 @@ func doMerge(c *cli.Context) {
 		fmt.Println("need at least 2 arguments")
 		os.Exit(1)
 	}
+
+	output := c.String("output")
 
 	mergeTo := args[0]
 	mergeFrom := args[1:]
@@ -229,6 +249,10 @@ func doMerge(c *cli.Context) {
 	check(client.Init())
 
 	check(client.UploadBucket())
+
+	if output != "" {
+		check(ioutil.WriteFile(output, []byte(merged.Hash), 0777))
+	}
 }
 
 var CatCommand = cli.Command{
