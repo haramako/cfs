@@ -3,9 +3,13 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs"
-	"os"
 )
 
 // エントリーポイント
@@ -35,12 +39,41 @@ func main() {
 	app.Commands = []cli.Command{
 		UploadCommand,
 		SyncCommand,
-		FetchCommand,
+		CatCommand,
+		LsCommand,
+		ConfigCommand,
 	}
 
 	err := app.Run(os.Args)
 	if err != nil {
 		fmt.Println(err)
+	}
+}
+
+func loadConfig(c *cli.Context) {
+	cfs.Verbose = c.GlobalBool("V")
+	cfs.LoadDefaultOptions(c.GlobalString("config"))
+
+	if c.GlobalString("cabinet") != "" {
+		cfs.Option.Cabinet = c.GlobalString("cabinet")
+	}
+
+	if c.GlobalString("url") != "" {
+		cfs.Option.Url = c.GlobalString("url")
+	}
+}
+
+func getDownloaderUrl() string {
+	if cfs.Option.Url != "" {
+		return cfs.Option.Url
+	} else {
+		// cabinetからダウンロード用URLを取得する
+		storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		return storage.DownloaderUrl().String()
 	}
 }
 
@@ -56,34 +89,43 @@ var UploadCommand = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  "bucket, b",
-			Value: ".bucket",
+			Value: "", // 指定されない場合は、自動で設定される
 			Usage: "bucket file name",
 		},
 	},
 }
 
-func loadConfig(c *cli.Context) {
-	cfs.Verbose = c.GlobalBool("V")
-	cfs.LoadDefaultOptions(c.GlobalString("config"))
-	if c.GlobalString("cabinet") != "" {
-		cfs.Option.Cabinet = c.GlobalString("cabinet")
-	}
-}
-
 func doUpload(c *cli.Context) {
 	loadConfig(c)
-
-	bucket, err := cfs.BucketFromFile(c.String("bucket"))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	bucket.Tag = c.String("tag")
 
 	args := c.Args()
 	if len(args) == 0 {
 		args = []string{"."}
 	}
+
+	bucketPath := c.String("bucket")
+	if bucketPath == "" {
+		// bucketが指定されていない場合は、自動でパスを作成する
+		absDirs := []string{}
+		for _, dir := range args {
+			absDir, err := filepath.Abs(dir)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			absDirs = append(absDirs, absDir)
+		}
+		filename := cfs.Option.Cabinet + ":" + strings.Join(absDirs, ":")
+		filename = strings.Replace(filename, "/", "__", -1)
+		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
+	}
+
+	bucket, err := cfs.BucketFromFile(bucketPath)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	bucket.Tag = c.String("tag")
 
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
 	if err != nil {
@@ -122,23 +164,21 @@ var SyncCommand = cli.Command{
 	Name:      "sync",
 	Usage:     "sync from cabinet",
 	Action:    doSync,
-	ArgsUsage: "base-url location output-dir",
-	Flags:     []cli.Flag{},
+	ArgsUsage: "location output-dir",
 }
 
 func doSync(c *cli.Context) {
 	loadConfig(c)
 
 	var args = c.Args()
-	if len(args) != 3 {
-		panic("need just 3 arguments")
+	if len(args) != 2 {
+		panic("need just 2 arguments")
 	}
 
-	baseUrl := args[0]
-	location := args[1]
-	dir := args[2]
+	location := args[0]
+	dir := args[1]
 
-	downloader, err := cfs.NewDownloader(baseUrl)
+	downloader, err := cfs.NewDownloader(getDownloaderUrl())
 	if err != nil {
 		panic(err)
 	}
@@ -155,37 +195,90 @@ func doSync(c *cli.Context) {
 
 }
 
-var FetchCommand = cli.Command{
-	Name:      "fetch",
+var CatCommand = cli.Command{
+	Name:      "cat",
 	Usage:     "fetch a data from url (for debug)",
-	Action:    doFetch,
-	ArgsUsage: "base-url location",
-	Flags:     []cli.Flag{},
+	Action:    doCat,
+	ArgsUsage: "location filename",
 }
 
-func doFetch(c *cli.Context) {
+func doCat(c *cli.Context) {
 	loadConfig(c)
-	/*
-		cfs.Verbose = c.GlobalBool("V")
 
-		var args = c.Args()
-		if len(args) < 2 {
-			panic("need 2 arguments")
-		}
+	var args = c.Args()
+	if len(args) < 2 {
+		panic("need 2 arguments")
+	}
 
-		url := args[0]
-		location := args[1]
+	location := args[0]
+	filename := args[1]
 
-		bucket, err := cfs.BucketFromUrl(url)
-		if err != nil {
-			panic(err)
-		}
+	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	if err != nil {
+		panic(err)
+	}
 
-		data, err := bucket.Fetch(location, cfs.DefaultContentAttribute())
-		if err != nil {
-			panic(err)
-		}
+	bucket, err := downloader.LoadBucket(location)
+	if err != nil {
+		panic(err)
+	}
 
-		print(string(data))
-	*/
+	content, ok := bucket.Contents[filename]
+	if !ok {
+		panic("file " + filename + " not found")
+	}
+
+	data, err := downloader.Fetch(content.Hash, content.Attr)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Print(string(data))
+}
+
+var LsCommand = cli.Command{
+	Name:      "ls",
+	Usage:     "list files in bucket",
+	Action:    doLs,
+	ArgsUsage: "location",
+}
+
+func doLs(c *cli.Context) {
+	loadConfig(c)
+
+	var args = c.Args()
+	if len(args) != 1 {
+		panic("need just 1 arguments")
+	}
+
+	location := args[0]
+
+	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	if err != nil {
+		panic(err)
+	}
+
+	bucket, err := downloader.LoadBucket(location)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, file := range bucket.Contents {
+		fmt.Printf("%-40s %s %s\n", file.Path, file.Hash, file.Time.Format(time.RFC3339))
+	}
+
+}
+
+var ConfigCommand = cli.Command{
+	Name:   "config",
+	Usage:  "show current config",
+	Action: doConfig,
+}
+
+func doConfig(c *cli.Context) {
+	loadConfig(c)
+
+	fmt.Printf("Cabinet       : %s\n", cfs.Option.Cabinet)
+	fmt.Printf("Downloader URL: %s\n", getDownloaderUrl())
+
 }

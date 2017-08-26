@@ -16,7 +16,8 @@ type OptionInfo struct {
 	EncryptIv  string
 
 	// common setting
-	Cabinet string
+	Cabinet string // アップロード先のURL
+	Url     string // ダウンロード先のURL
 
 	// Google Cloud Storage setting
 
@@ -31,7 +32,7 @@ var Option = &OptionInfo{
 	Flatten:    false,
 	EncryptKey: "",
 	EncryptIv:  "",
-	Cabinet:    "http://localhost:8086",
+	Cabinet:    "file:///var/cfs",
 }
 
 func LoadDefaultOptions(configFile string) {

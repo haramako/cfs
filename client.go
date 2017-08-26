@@ -1,14 +1,12 @@
 package cfs
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 )
 
 type uploadRequest struct {
@@ -47,7 +45,6 @@ func (c *Client) uploadWorker() {
 		err := c.Storage.Upload(req.Filename, req.Hash, req.Data, false)
 		if err != nil {
 			fmt.Println(err)
-			//return "", 0, err
 		}
 	}
 }
@@ -200,29 +197,10 @@ func (c *Client) Finish() error {
 	}
 
 	if b.Tag != "" {
-		tag := TagFile{
-			Name:       b.Tag,
-			CreatedAt:  time.Now(),
-			EncryptKey: Option.EncryptKey,
-			EncryptIv:  Option.EncryptIv,
-			Attr:       DefaultContentAttribute(),
-			Hash:       b.Hash,
-		}
-
-		tagBytes, err := json.Marshal(tag)
+		err = c.Storage.UploadTag(b.Tag, []byte(b.Hash))
 		if err != nil {
 			return err
 		}
-
-		_ = tagBytes
-
-		/*
-
-			_, err = b.post(path.Join("api/tags", b.Tag), tagBytes)
-			if err != nil {
-				return err
-			}
-		*/
 	}
 
 	close(c.queue)

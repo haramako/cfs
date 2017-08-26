@@ -69,3 +69,18 @@ func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite
 	//}
 	return nil
 }
+
+func (s *GcsStorage) UploadTag(filename string, body []byte) error {
+	path := "tag/" + filename
+	object := &storage.Object{Name: path}
+
+	_, err := s.service.Objects.Insert(s.BucketName, object).Media(bytes.NewBuffer(body)).Do()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	fmt.Printf("uploading '%s'\n", filename)
+
+	return nil
+}

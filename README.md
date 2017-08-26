@@ -20,3 +20,8 @@
   * file(-b)
     * cfs cat [-o outfile] (tag|hash) file
 
+
+* bucketファイルを自動で
+* キャッシュクリアを追加
+* statでいろいろ情報を確認
+* info で現在のcfsenvを確認

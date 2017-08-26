@@ -59,3 +59,24 @@ func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrit
 
 	return nil
 }
+
+func (s *FileStorage) UploadTag(filename string, body []byte) error {
+	dataDir := filepath.Join(s.CabinetPath, "tag")
+	file := filepath.Join(dataDir, filename)
+
+	err := os.MkdirAll(dataDir, 0777)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(file, body, 0777)
+	if err != nil {
+		return err
+	}
+
+	//if Verbose {
+	fmt.Printf("uploading tag '%s'\n", filename)
+	//}
+
+	return nil
+}

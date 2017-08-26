@@ -81,3 +81,7 @@ func (s *CfsStorage) post(location string, body []byte) ([]byte, error) {
 
 	return resp_body, nil
 }
+
+func (s *CfsStorage) UploadTag(filename string, body []byte) error {
+	panic("not implemented")
+}

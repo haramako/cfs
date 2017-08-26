@@ -40,8 +40,16 @@ func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
 
 	var body []byte
 	if !isHash(location) {
-		return nil, fmt.Errorf("%s is not hash", location)
+		locationBytes, err := d.FetchTag(location)
+		if err != nil {
+			return nil, err
+		}
+		location = string(locationBytes)
+		if !isHash(location) {
+			return nil, fmt.Errorf("%s is not hash", location)
+		}
 	}
+
 	body, err := d.Fetch(location, DefaultContentAttribute())
 	if err != nil {
 		return nil, err
@@ -114,6 +122,21 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	return data, nil
+}
+
+func (d *Downloader) FetchTag(tag string) ([]byte, error) {
+
+	fetch_url, err := d.BaseUrl.Parse("tag/" + tag)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := fetch(fetch_url)
+	if err != nil {
+		return nil, err
 	}
 
 	return data, nil

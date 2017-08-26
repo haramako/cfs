@@ -13,8 +13,6 @@ type S3Storage struct {
 	cabinetUrl *url.URL
 	s3         *s3.S3
 	bucket     *s3.Bucket
-	//base   string
-	//stat   UploaderStat
 }
 
 type S3UploderOption struct {
@@ -50,8 +48,6 @@ func (s *S3Storage) DownloaderUrl() *url.URL {
 }
 
 func (s *S3Storage) Upload(filename string, hash string, body []byte, overwrite bool) error {
-
-	//func (u *S3Uploader) Upload(path string, body []byte, overwrite bool) error {
 	path := "data/" + hashPath(hash)
 
 	if !overwrite {
@@ -64,6 +60,19 @@ func (s *S3Storage) Upload(filename string, hash string, body []byte, overwrite 
 			return nil
 		}
 	}
+
+	err := s.bucket.Put(path, body, "binary/octet-stream", s3.BucketOwnerFull, s3.Options{})
+	if err != nil {
+		return err
+	}
+	if Verbose {
+		fmt.Printf("uploading '%s'\n", path)
+	}
+	return nil
+}
+
+func (s *S3Storage) UploadTag(filename string, body []byte) error {
+	path := "tag/" + filename
 
 	err := s.bucket.Put(path, body, "binary/octet-stream", s3.BucketOwnerFull, s3.Options{})
 	if err != nil {
