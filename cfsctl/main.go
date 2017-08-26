@@ -53,9 +53,9 @@ func main() {
 
 func check(err error) {
 	if err != nil {
-		panic(err)
-		//fmt.Println(err)
-		//os.Exit(1)
+		//panic(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -78,10 +78,7 @@ func getDownloaderUrl() string {
 	} else {
 		// cabinetからダウンロード用URLを取得する
 		storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+		check(err)
 		return storage.DownloaderUrl().String()
 	}
 }
@@ -115,58 +112,40 @@ func doUpload(c *cli.Context) {
 	bucketPath := c.String("bucket")
 	if bucketPath == "" {
 		// bucketが指定されていない場合は、自動でパスを作成する
+		cwd, err := filepath.Abs(".")
+		check(err)
+
 		absDirs := []string{}
 		for _, dir := range args {
 			absDir, err := filepath.Abs(dir)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
+			check(err)
 			absDirs = append(absDirs, absDir)
 		}
-		filename := cfs.Option.Cabinet + ":" + strings.Join(absDirs, ":")
+		filename := cfs.Option.Cabinet + ":" + cwd + ":" + strings.Join(absDirs, ":")
 		filename = strings.Replace(filename, "/", "__", -1)
 		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
 	bucket, err := cfs.BucketFromFile(bucketPath)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	check(err)
 	bucket.Tag = c.String("tag")
 
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	check(err)
 
 	client := &cfs.Client{
 		Storage: storage,
 		Bucket:  bucket,
 	}
 
-	err = client.Init()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	check(client.Init())
 
 	for _, path := range args {
-		err = client.AddFiles(path)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+		check(client.AddFiles(path))
 	}
 
 	bucket.RemoveUntouched()
-	err = client.Finish()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	check(client.Finish())
 }
 
 var SyncCommand = cli.Command{
@@ -181,27 +160,20 @@ func doSync(c *cli.Context) {
 
 	var args = c.Args()
 	if len(args) != 2 {
-		panic("need just 2 arguments")
+		fmt.Println("need just 2 arguments")
+		os.Exit(1)
 	}
 
 	location := args[0]
 	dir := args[1]
 
 	downloader, err := cfs.NewDownloader(getDownloaderUrl())
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	bucket, err := downloader.LoadBucket(location)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
-	err = downloader.Sync(bucket, dir)
-	if err != nil {
-		panic(err)
-	}
-
+	check(downloader.Sync(bucket, dir))
 }
 
 var MergeCommand = cli.Command{
@@ -216,16 +188,15 @@ func doMerge(c *cli.Context) {
 
 	var args = c.Args()
 	if len(args) < 2 {
-		panic("need at least 2 arguments")
+		fmt.Println("need at least 2 arguments")
+		os.Exit(1)
 	}
 
 	mergeTo := args[0]
 	mergeFrom := args[1:]
 
 	downloader, err := cfs.NewDownloader(getDownloaderUrl())
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	merged := &cfs.Bucket{
 		Tag:      mergeTo,
@@ -235,9 +206,7 @@ func doMerge(c *cli.Context) {
 
 	for _, location := range mergeFrom {
 		bucket, err := downloader.LoadBucket(location)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 		if cfs.Verbose {
 			fmt.Printf("%d files merged from %s\n", len(bucket.Contents), location)
 		}
@@ -274,31 +243,27 @@ func doCat(c *cli.Context) {
 
 	var args = c.Args()
 	if len(args) < 2 {
-		panic("need 2 arguments")
+		fmt.Println("need 2 arguments")
+		os.Exit(1)
 	}
 
 	location := args[0]
 	filename := args[1]
 
 	downloader, err := cfs.NewDownloader(getDownloaderUrl())
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	bucket, err := downloader.LoadBucket(location)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	content, ok := bucket.Contents[filename]
 	if !ok {
-		panic("file " + filename + " not found")
+		fmt.Println("file " + filename + " not found")
+		os.Exit(1)
 	}
 
 	data, err := downloader.Fetch(content.Hash, content.Attr)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	fmt.Print(string(data))
 }
@@ -315,20 +280,17 @@ func doLs(c *cli.Context) {
 
 	var args = c.Args()
 	if len(args) != 1 {
-		panic("need just 1 arguments")
+		fmt.Println("need just 1 arguments")
+		os.Exit(1)
 	}
 
 	location := args[0]
 
 	downloader, err := cfs.NewDownloader(getDownloaderUrl())
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	bucket, err := downloader.LoadBucket(location)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	for _, file := range bucket.Contents {
 		fmt.Printf("%-40s %s %s\n", file.Path, file.Hash, file.Time.Format(time.RFC3339))
