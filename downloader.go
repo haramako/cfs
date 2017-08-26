@@ -17,8 +17,8 @@ type Downloader struct {
 	BaseUrl *url.URL
 }
 
-func NewDownloader(base_rawurl string) (*Downloader, error) {
-	url, err := url.Parse(base_rawurl)
+func NewDownloader(baseRawurl string) (*Downloader, error) {
+	url, err := url.Parse(baseRawurl)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,6 @@ func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
 
 	b := &Bucket{
 		Contents: make(map[string]Content),
-		location: location,
 		HashType: "md5",
 	}
 
@@ -92,12 +91,12 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		return nil, fmt.Errorf("cannot fetch data, %s is not a hash", hash)
 	}
 
-	fetch_url, err := d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
+	fetchUrl, err := d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := fetch(fetch_url)
+	data, err := fetch(fetchUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -108,9 +107,9 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 			panic(err)
 		}
 		cfb := cipher.NewCFBDecrypter(block, []byte(Option.EncryptIv))
-		plain_data := make([]byte, len(data))
-		cfb.XORKeyStream(plain_data, data)
-		data = plain_data
+		plainData := make([]byte, len(data))
+		cfb.XORKeyStream(plainData, data)
+		data = plainData
 	}
 
 	if attr.Compressed() {
@@ -129,12 +128,12 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 
 func (d *Downloader) FetchTag(tag string) ([]byte, error) {
 
-	fetch_url, err := d.BaseUrl.Parse("tag/" + tag)
+	fetchUrl, err := d.BaseUrl.Parse("tag/" + tag)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := fetch(fetch_url)
+	data, err := fetch(fetchUrl)
 	if err != nil {
 		return nil, err
 	}

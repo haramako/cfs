@@ -27,12 +27,12 @@ func (s *CfsStorage) DownloaderUrl() *url.URL {
 
 func (s *CfsStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {
 
-	nonexists_res, err := s.post("api/nonexists", []byte(hash))
+	nonexistsRes, err := s.post("api/nonexists", []byte(hash))
 	if err != nil {
 		return err
 	}
 
-	if len(nonexists_res) == 0 {
+	if len(nonexistsRes) == 0 {
 		return nil
 	}
 
@@ -74,12 +74,12 @@ func (s *CfsStorage) post(location string, body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("response code not 200 OK but %d, %s", resp.StatusCode, url.String())
 	}
 
-	resp_body, err := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read body %s", url.String())
 	}
 
-	return resp_body, nil
+	return respBody, nil
 }
 
 func (s *CfsStorage) UploadTag(filename string, body []byte) error {

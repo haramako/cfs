@@ -39,6 +39,7 @@ func main() {
 	app.Commands = []cli.Command{
 		UploadCommand,
 		SyncCommand,
+		MergeCommand,
 		CatCommand,
 		LsCommand,
 		ConfigCommand,
@@ -47,6 +48,14 @@ func main() {
 	err := app.Run(os.Args)
 	if err != nil {
 		fmt.Println(err)
+	}
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+		//fmt.Println(err)
+		//os.Exit(1)
 	}
 }
 
@@ -195,6 +204,64 @@ func doSync(c *cli.Context) {
 
 }
 
+var MergeCommand = cli.Command{
+	Name:      "merge",
+	Usage:     "merge buckets",
+	Action:    doMerge,
+	ArgsUsage: "output-tag location [...]",
+}
+
+func doMerge(c *cli.Context) {
+	loadConfig(c)
+
+	var args = c.Args()
+	if len(args) < 2 {
+		panic("need at least 2 arguments")
+	}
+
+	mergeTo := args[0]
+	mergeFrom := args[1:]
+
+	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	if err != nil {
+		panic(err)
+	}
+
+	merged := &cfs.Bucket{
+		Tag:      mergeTo,
+		Contents: make(map[string]cfs.Content),
+		HashType: "md5",
+	}
+
+	for _, location := range mergeFrom {
+		bucket, err := downloader.LoadBucket(location)
+		if err != nil {
+			panic(err)
+		}
+		if cfs.Verbose {
+			fmt.Printf("%d files merged from %s\n", len(bucket.Contents), location)
+		}
+		merged.Merge(bucket)
+	}
+
+	if cfs.Verbose {
+		fmt.Printf("total %d files into %s\n", len(merged.Contents), mergeTo)
+	}
+
+	// マージしたバケットを書き込む
+	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
+	check(err)
+
+	client := &cfs.Client{
+		Storage: storage,
+		Bucket:  merged,
+	}
+
+	check(client.Init())
+
+	check(client.UploadBucket())
+}
+
 var CatCommand = cli.Command{
 	Name:      "cat",
 	Usage:     "fetch a data from url (for debug)",
@@ -280,5 +347,4 @@ func doConfig(c *cli.Context) {
 
 	fmt.Printf("Cabinet       : %s\n", cfs.Option.Cabinet)
 	fmt.Printf("Downloader URL: %s\n", getDownloaderUrl())
-
 }

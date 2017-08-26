@@ -46,8 +46,8 @@ func LoadDefaultOptions(configFile string) {
 			fmt.Printf("cannot parse %s, %s\n", configFile, err)
 		}
 		if Verbose {
-			option_json, _ := json.Marshal(Option)
-			fmt.Printf("option loaded as %s\n", option_json)
+			optionJson, _ := json.Marshal(Option)
+			fmt.Printf("option loaded as %s\n", optionJson)
 		}
 	}
 }

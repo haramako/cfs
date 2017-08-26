@@ -32,14 +32,14 @@ func hashPath(hash string) string {
 	return hash[0:2] + "/" + hash[2:]
 }
 
-func encode(orig_data []byte, encrypt_key string, encrypt_iv string, attr ContentAttribute) ([]byte, bool, error) {
-	data := orig_data
+func encode(origData []byte, encrypt_key string, encrypt_iv string, attr ContentAttribute) ([]byte, bool, error) {
+	data := origData
 	hash_changed := false
 
 	if attr.Compressed() {
 		var buf bytes.Buffer
 		w := zlib.NewWriter(&buf)
-		w.Write(orig_data)
+		w.Write(origData)
 		w.Close()
 		data = buf.Bytes()
 		hash_changed = true

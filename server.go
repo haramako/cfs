@@ -4,13 +4,14 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
@@ -71,10 +72,10 @@ func (s *Server) upload(c *gin.Context) {
 		c.AbortWithError(500, err)
 		return
 	}
-	body_hash := fmt.Sprintf("%x", md5.Sum(body))
+	bodyHash := fmt.Sprintf("%x", md5.Sum(body))
 
-	if hash != body_hash {
-		c.AbortWithError(500, fmt.Errorf("invalid data hash %s", body_hash))
+	if hash != bodyHash {
+		c.AbortWithError(500, fmt.Errorf("invalid data hash %s", bodyHash))
 		return
 	}
 
@@ -89,15 +90,15 @@ func (s *Server) upload(c *gin.Context) {
 
 func (s *Server) indexTags(c *gin.Context) {
 
-	tag_files, err := ioutil.ReadDir(s.tagsFilepath())
+	tagFiles, err := ioutil.ReadDir(s.tagsFilepath())
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
 
 	var tags []*TagFile
-	for _, tag_file := range tag_files {
-		tagBytes, err := ioutil.ReadFile(s.tagFilepath(tag_file.Name()))
+	for _, tagFile := range tagFiles {
+		tagBytes, err := ioutil.ReadFile(s.tagFilepath(tagFile.Name()))
 		if err != nil {
 			c.AbortWithError(500, err)
 			return
@@ -142,27 +143,27 @@ func (s *Server) getTags(c *gin.Context) {
 func (s *Server) postTags(c *gin.Context) {
 	id := c.Param("id")
 
-	new_tag, err := TagFileFromReader(c.Request.Body)
+	newTag, err := TagFileFromReader(c.Request.Body)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
 
-	old_tag, err := TagFileFromFile(s.tagFilepath(id))
+	oldTag, err := TagFileFromFile(s.tagFilepath(id))
 	if err == nil {
-		if new_tag.Hash == old_tag.Hash {
+		if newTag.Hash == oldTag.Hash {
 			c.String(200, "not modified")
 			return
 		}
 	}
 
-	tag_file, err := json.Marshal(new_tag)
+	tagFile, err := json.Marshal(newTag)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
 
-	err = ioutil.WriteFile(s.tagFilepath(id), tag_file, 0666)
+	err = ioutil.WriteFile(s.tagFilepath(id), tagFile, 0666)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
@@ -174,7 +175,7 @@ func (s *Server) postTags(c *gin.Context) {
 		return
 	}
 
-	err = ioutil.WriteFile(s.versionFilepath(id), tag_file, 0666)
+	err = ioutil.WriteFile(s.versionFilepath(id), tagFile, 0666)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
@@ -185,7 +186,7 @@ func (s *Server) postTags(c *gin.Context) {
 
 func (s *Server) getTagsFile(c *gin.Context) {
 	id := c.Param("id")
-	content_path := c.Param("path")[1:] // '/' を消す
+	contentPath := c.Param("path")[1:] // '/' を消す
 	tag, err := TagFileFromFile(s.tagFilepath(id))
 	if err != nil {
 		c.AbortWithError(500, err)
@@ -198,25 +199,25 @@ func (s *Server) getTagsFile(c *gin.Context) {
 		return
 	}
 
-	content, found := bucket.Contents[content_path]
+	content, found := bucket.Contents[contentPath]
 	if !found {
-		c.AbortWithError(500, fmt.Errorf("content %s not found", content_path))
+		c.AbortWithError(500, fmt.Errorf("content %s not found", contentPath))
 		return
 	}
 
-	content_body, err := ioutil.ReadFile(s.hashFilepath(content.Hash))
+	contentBody, err := ioutil.ReadFile(s.hashFilepath(content.Hash))
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
 
-	content_body, err = decode(content_body, tag.EncryptKey, tag.EncryptIv, content.Attr)
+	contentBody, err = decode(contentBody, tag.EncryptKey, tag.EncryptIv, content.Attr)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
 
-	c.Data(200, "text/plain", content_body)
+	c.Data(200, "text/plain", contentBody)
 }
 
 func check(err error) {
@@ -246,10 +247,10 @@ func (s *Server) nonexists(c *gin.Context) {
 		return
 	}
 
-	hash_list := strings.Split(string(body), "\n")
-	result := make([]string, len(hash_list))
+	hashList := strings.Split(string(body), "\n")
+	result := make([]string, len(hashList))
 
-	for _, hash := range hash_list {
+	for _, hash := range hashList {
 		_, err := os.Stat(s.hashFilepath(hash))
 		if err != nil && os.IsNotExist(err) {
 			result = append(result, hash)
@@ -345,10 +346,10 @@ func (s *Server) Init() error {
 	}
 
 	for i := 0; i < 256; i++ {
-		dir_path := filepath.Join(s.dataFilepath(), fmt.Sprintf("%02x", i))
-		err = os.MkdirAll(dir_path, 0777)
+		dirPath := filepath.Join(s.dataFilepath(), fmt.Sprintf("%02x", i))
+		err = os.MkdirAll(dirPath, 0777)
 		if err != nil {
-			return fmt.Errorf("cannot create hash directory %s", dir_path)
+			return fmt.Errorf("cannot create hash directory %s", dirPath)
 		}
 	}
 

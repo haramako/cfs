@@ -49,16 +49,25 @@ func (c *Client) uploadWorker() {
 	}
 }
 
-func (c *Client) Upload(filename string, orig_data []byte, orig_hash string, attr ContentAttribute) (string, int, error) {
-
-	data, hash_changed, err := encode(orig_data, Option.EncryptKey, Option.EncryptIv, attr)
+func (c *Client) Encode(origHash string, origData []byte, attr ContentAttribute) (hash string, data []byte, err error) {
+	data, hashChanged, err := encode(origData, Option.EncryptKey, Option.EncryptIv, attr)
 	if err != nil {
-		return "", 0, err
+		return
 	}
 
-	hash := orig_hash
-	if hash_changed {
+	if hashChanged {
 		hash = c.Bucket.Sum(data)
+	} else {
+		hash = origHash
+	}
+
+	return
+}
+
+func (c *Client) Upload(filename string, origHash string, origData []byte, attr ContentAttribute) (string, int, error) {
+	hash, data, err := c.Encode(origHash, origData, attr)
+	if err != nil {
+		return "", 0, err
 	}
 
 	c.queue <- uploadRequest{Filename: filename, Hash: hash, Data: data}
@@ -139,18 +148,18 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		}
 	}
 
-	orig_data, err := ioutil.ReadFile(fullPath)
+	origData, err := ioutil.ReadFile(fullPath)
 	if err != nil {
 		return false, err
 	}
 
-	orig_hash := b.Sum(orig_data)
-	if found && old.OrigHash == orig_hash {
+	origHash := b.Sum(origData)
+	if found && old.OrigHash == origHash {
 		return false, nil
 	}
 
 	attr := b.GetAttribute(relative)
-	hash, size, err := c.Upload(relative, orig_data, orig_hash, attr)
+	hash, size, err := c.Upload(relative, origHash, origData, attr)
 	if err != nil {
 		return false, err
 	}
@@ -164,47 +173,61 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		Hash:     hash,
 		Size:     size,
 		Time:     info.ModTime(),
-		OrigHash: orig_hash,
-		OrigSize: len(orig_data),
+		OrigHash: origHash,
+		OrigSize: len(origData),
 		Attr:     attr,
 		Touched:  true,
 	}
-	b.changed = true
 
 	return true, nil
 }
 
 func (c *Client) Finish() error {
+	c.UploadBucket()
+
+	close(c.queue)
+	c.waitGroup.Wait()
+
+	return nil
+}
+
+func (c *Client) UploadBucket() error {
 	b := c.Bucket
 
-	orig_data := []byte(b.Dump())
-	orig_hash := b.Sum(orig_data)
+	origData := []byte(b.Dump())
+	origHash := b.Sum(origData)
 
-	hash, _, err := c.Upload("*bucket*", orig_data, orig_hash, DefaultContentAttribute())
+	hash, data, err := c.Encode(origHash, origData, DefaultContentAttribute())
+	if err != nil {
+		return err
+	}
+
+	err = c.Storage.Upload("*bucket*", hash, data, false)
 	if err != nil {
 		return err
 	}
 	b.Hash = hash
 
-	err = ioutil.WriteFile(filepath.FromSlash(b.Path), orig_data, 0666)
-	if err != nil {
-		return err
+	// バケットの保存先が設定されているなら保存する
+	if b.Path != "" {
+		err = ioutil.WriteFile(filepath.FromSlash(b.Path), origData, 0666)
+		if err != nil {
+			return err
+		}
+
+		ioutil.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
+		if Verbose {
+			fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
+		}
 	}
 
-	ioutil.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
-	if Verbose {
-		fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
-	}
-
+	// タグが設定されているなら、保存する
 	if b.Tag != "" {
 		err = c.Storage.UploadTag(b.Tag, []byte(b.Hash))
 		if err != nil {
 			return err
 		}
 	}
-
-	close(c.queue)
-	c.waitGroup.Wait()
 
 	return nil
 }

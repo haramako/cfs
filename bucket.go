@@ -21,8 +21,6 @@ type Bucket struct {
 	Hash        string
 	ExcludeList []string
 	Contents    map[string]Content
-	changed     bool
-	location    string
 	HashType    string
 	UploadCount int
 }
@@ -117,6 +115,14 @@ func (b *Bucket) Parse(s []byte) error {
 		}
 	}
 	return nil
+}
+
+// bにfromの内容をマージする
+// 両方に存在する場合は、fromの内容で上書きされる
+func (b *Bucket) Merge(from *Bucket) {
+	for _, c := range from.Contents {
+		b.Contents[c.Path] = c
+	}
 }
 
 func (b *Bucket) Sum(data []byte) string {
