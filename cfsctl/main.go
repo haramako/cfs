@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -316,7 +317,15 @@ func doLs(c *cli.Context) {
 	bucket, err := downloader.LoadBucket(location)
 	check(err)
 
-	for _, file := range bucket.Contents {
+	// To store the keys in slice in sorted order
+	var keys []string
+	for k := range bucket.Contents {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		file := bucket.Contents[k]
 		fmt.Printf("%-40s %s %s\n", file.Path, file.Hash, file.Time.Format(time.RFC3339))
 	}
 
