@@ -1,10 +1,6 @@
 package cfs
 
 import (
-	"bytes"
-	"compress/zlib"
-	"crypto/aes"
-	"crypto/cipher"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -101,29 +97,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		return nil, err
 	}
 
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(Option.EncryptKey))
-		if err != nil {
-			panic(err)
-		}
-		cfb := cipher.NewCFBDecrypter(block, []byte(Option.EncryptIv))
-		plainData := make([]byte, len(data))
-		cfb.XORKeyStream(plainData, data)
-		data = plainData
-	}
-
-	if attr.Compressed() {
-		r, err := zlib.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		data, err = ioutil.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return data, nil
+	return decode(data, Option.EncryptKey, Option.EncryptIv, attr)
 }
 
 func (d *Downloader) FetchTag(tag string) ([]byte, error) {

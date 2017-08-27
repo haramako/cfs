@@ -62,6 +62,17 @@ func encode(origData []byte, encrypt_key string, encrypt_iv string, attr Content
 
 func decode(data []byte, encrypt_key string, encrypt_iv string, attr ContentAttribute) ([]byte, error) {
 
+	if attr.Crypted() {
+		block, err := aes.NewCipher([]byte(encrypt_key))
+		if err != nil {
+			return nil, err
+		}
+		cfb := cipher.NewCFBDecrypter(block, []byte(encrypt_iv))
+		cipher_data := make([]byte, len(data))
+		cfb.XORKeyStream(cipher_data, data)
+		data = cipher_data
+	}
+
 	if attr.Compressed() {
 		r, err := zlib.NewReader(bytes.NewReader(data))
 		if err != nil {
@@ -76,17 +87,6 @@ func decode(data []byte, encrypt_key string, encrypt_iv string, attr ContentAttr
 
 		r.Close()
 		data = buf.Bytes()
-	}
-
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(encrypt_key))
-		if err != nil {
-			return nil, err
-		}
-		cfb := cipher.NewCFBEncrypter(block, []byte(encrypt_iv))
-		cipher_data := make([]byte, len(data))
-		cfb.XORKeyStream(cipher_data, data)
-		data = cipher_data
 	}
 
 	return data, nil

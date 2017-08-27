@@ -12,9 +12,13 @@ import (
 	"time"
 )
 
+// ExcludePatterns は除外するファイルのパターンを表す
 var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
+
+// Verbose 詳細なログを表示するかどうか
 var Verbose = false
 
+// Bucket バケット
 type Bucket struct {
 	Tag         string
 	Path        string
@@ -25,13 +29,19 @@ type Bucket struct {
 	UploadCount int
 }
 
-const (
-	Compressed = 1
-	Crypted    = 2
-)
-
+// ContentAttribute はコンテンツの圧縮や暗号の状態を表すenum
 type ContentAttribute int
 
+const (
+	// NoContentAttribute は圧縮も暗号化もしないことを示す
+	NoContentAttribute ContentAttribute = 0
+	// Compressed は圧縮をするかどうかを示す
+	Compressed = 1
+	// Crypted は暗号化をするかどうかを示す
+	Crypted = 2
+)
+
+// Content は一つのファイルの内容を表すstruct
 type Content struct {
 	Path     string
 	Hash     string
@@ -44,7 +54,7 @@ type Content struct {
 }
 
 func DefaultContentAttribute() ContentAttribute {
-	var result = 0
+	var result ContentAttribute
 	if Option.Compress {
 		result |= Compressed
 	}

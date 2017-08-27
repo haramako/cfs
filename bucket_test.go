@@ -112,8 +112,8 @@ func setupBucketWithFiles() (*Client, *Bucket, string) {
 	return c, b, dir
 }
 
-func setupBucketFromUrl(baseUrl *url.URL, location string) (*Downloader, *Bucket) {
-	downloader, err := NewDownloader(baseUrl.String())
+func setupBucketFromURL(baseURL *url.URL, location string) (*Downloader, *Bucket) {
+	downloader, err := NewDownloader(baseURL.String())
 	if err != nil {
 		panic(err)
 	}
@@ -226,7 +226,7 @@ func TestCompress(t *testing.T) {
 		return
 	}
 
-	d, b2 := setupBucketFromUrl(c.Storage.DownloaderUrl(), b.Hash)
+	d, b2 := setupBucketFromURL(c.Storage.DownloaderUrl(), b.Hash)
 	if b2 == nil {
 		return // なにもしない
 	}

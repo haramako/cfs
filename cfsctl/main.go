@@ -39,12 +39,12 @@ func main() {
 		},
 	}
 	app.Commands = []cli.Command{
-		UploadCommand,
-		SyncCommand,
-		MergeCommand,
-		CatCommand,
-		LsCommand,
-		ConfigCommand,
+		uploadCommand,
+		syncCommand,
+		mergeCommand,
+		catCommand,
+		lsCommand,
+		configCommand,
 	}
 
 	err := app.Run(os.Args)
@@ -74,18 +74,20 @@ func loadConfig(c *cli.Context) {
 	}
 }
 
-func getDownloaderUrl() string {
+// ダウンロード用のURLを取得する
+// Option.URL が指定されていない場合は、cabinetの情報から取得する
+func getDownloaderURL() string {
+	// 指定されているなら、それを返す
 	if cfs.Option.Url != "" {
 		return cfs.Option.Url
-	} else {
-		// cabinetからダウンロード用URLを取得する
-		storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-		check(err)
-		return storage.DownloaderUrl().String()
 	}
+	// cabinetからダウンロード用URLを取得する
+	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
+	check(err)
+	return storage.DownloaderUrl().String()
 }
 
-var UploadCommand = cli.Command{
+var uploadCommand = cli.Command{
 	Name:   "upload",
 	Usage:  "upload files to cabinet",
 	Action: doUpload,
@@ -106,6 +108,24 @@ var UploadCommand = cli.Command{
 			Usage: "hash output file",
 		},
 	},
+}
+
+var hex = []byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
+
+// ファイル名に使える文字列に変換する
+// "0-9A-Za-z_-$." はそのままで、それ以外はURLエンコードを行う
+func escapeFilename(s string) string {
+	r := make([]byte, 0, len(s)*3)
+	for _, c := range []byte(s) {
+		if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-' || c == '_' || c == '.' || c == '$' {
+			r = append(r, c)
+		} else {
+			r = append(r, '%')
+			r = append(r, hex[(c>>4)&0x0f])
+			r = append(r, hex[(c>>0)&0x0f])
+		}
+	}
+	return string(r)
 }
 
 func doUpload(c *cli.Context) {
@@ -129,8 +149,9 @@ func doUpload(c *cli.Context) {
 			check(err)
 			absDirs = append(absDirs, absDir)
 		}
-		filename := cfs.Option.Cabinet + ":" + cwd + ":" + strings.Join(absDirs, ":")
-		filename = strings.Replace(filename, string(os.PathSeparator), "__", -1)
+		filename := cfs.Option.Cabinet + "$" + cwd + "$" + strings.Join(absDirs, "$")
+		filename = escapeFilename(filename)
+		println(filename)
 		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
@@ -160,7 +181,7 @@ func doUpload(c *cli.Context) {
 	}
 }
 
-var SyncCommand = cli.Command{
+var syncCommand = cli.Command{
 	Name:      "sync",
 	Usage:     "sync from cabinet",
 	Action:    doSync,
@@ -179,7 +200,7 @@ func doSync(c *cli.Context) {
 	location := args[0]
 	dir := args[1]
 
-	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
 	bucket, err := downloader.LoadBucket(location)
@@ -188,7 +209,7 @@ func doSync(c *cli.Context) {
 	check(downloader.Sync(bucket, dir))
 }
 
-var MergeCommand = cli.Command{
+var mergeCommand = cli.Command{
 	Name:      "merge",
 	Usage:     "merge buckets",
 	Action:    doMerge,
@@ -216,7 +237,7 @@ func doMerge(c *cli.Context) {
 	mergeTo := args[0]
 	mergeFrom := args[1:]
 
-	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
 	merged := &cfs.Bucket{
@@ -256,7 +277,7 @@ func doMerge(c *cli.Context) {
 	}
 }
 
-var CatCommand = cli.Command{
+var catCommand = cli.Command{
 	Name:      "cat",
 	Usage:     "fetch a data from url (for debug)",
 	Action:    doCat,
@@ -275,7 +296,7 @@ func doCat(c *cli.Context) {
 	location := args[0]
 	filename := args[1]
 
-	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
 	bucket, err := downloader.LoadBucket(location)
@@ -293,7 +314,7 @@ func doCat(c *cli.Context) {
 	fmt.Print(string(data))
 }
 
-var LsCommand = cli.Command{
+var lsCommand = cli.Command{
 	Name:      "ls",
 	Usage:     "list files in bucket",
 	Action:    doLs,
@@ -311,7 +332,7 @@ func doLs(c *cli.Context) {
 
 	location := args[0]
 
-	downloader, err := cfs.NewDownloader(getDownloaderUrl())
+	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
 	bucket, err := downloader.LoadBucket(location)
@@ -331,7 +352,7 @@ func doLs(c *cli.Context) {
 
 }
 
-var ConfigCommand = cli.Command{
+var configCommand = cli.Command{
 	Name:   "config",
 	Usage:  "show current config",
 	Action: doConfig,
@@ -341,5 +362,5 @@ func doConfig(c *cli.Context) {
 	loadConfig(c)
 
 	fmt.Printf("Cabinet       : %s\n", cfs.Option.Cabinet)
-	fmt.Printf("Downloader URL: %s\n", getDownloaderUrl())
+	fmt.Printf("Downloader URL: %s\n", getDownloaderURL())
 }

@@ -2,6 +2,7 @@
 *.hash
 gin-bin
 /cfsctl/cfsctl
+/cfsctl/cfsctl.exe
 /cfsctl/.cfsenv
 /cfssv/cfssv.conf
 /cfssv/cfssv
@@ -11,3 +12,4 @@ gin-bin
 /bin
 /**/Godeps/Readme
 /**/Godeps/_workspace
+/.vscode

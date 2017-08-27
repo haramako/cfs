@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type FileStorage struct {
@@ -17,7 +18,12 @@ func NewFileStorage(cabinetPath string) (*FileStorage, error) {
 	s := &FileStorage{
 		CabinetPath: cabinetPath,
 	}
-	rootUrl, err := url.Parse("file://" + s.CabinetPath + "/")
+
+	if isWindows() {
+		cabinetPath = strings.Replace(cabinetPath, "\\", "/", -1)
+	}
+
+	rootUrl, err := url.Parse("file://" + cabinetPath + "/")
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +40,16 @@ func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrit
 		return fmt.Errorf("%v is not hash", hash)
 	}
 
-	dataDir := filepath.Join(s.CabinetPath, "data")
+	cabinetPath := s.CabinetPath
+	if isWindows() {
+		if cabinetPath[0] == '/' {
+			// Windowsの場合 "file:///C:/dir/path" の場合に
+			// cabinetPath が "/C:/dir/path" ではなく "C:/dir/path" になるように調整する
+			cabinetPath = cabinetPath[1:]
+		}
+	}
+
+	dataDir := filepath.Join(cabinetPath, "data")
 	dir := filepath.Join(dataDir, hash[0:2])
 	file := filepath.Join(dir, hash[2:])
 
