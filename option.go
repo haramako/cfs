@@ -14,6 +14,7 @@ type OptionInfo struct {
 	Compress   bool
 	EncryptKey string
 	EncryptIv  string
+	NoCache    bool
 
 	// common setting
 	Cabinet string // アップロード先のURL

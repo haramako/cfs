@@ -37,6 +37,10 @@ func main() {
 			Value: "",
 			Usage: "cabinet URL",
 		},
+		cli.BoolFlag{
+			Name:  "force, f",
+			Usage: "force upload(use no cache)",
+		},
 	}
 	app.Commands = []cli.Command{
 		uploadCommand,
@@ -71,6 +75,10 @@ func loadConfig(c *cli.Context) {
 
 	if c.GlobalString("url") != "" {
 		cfs.Option.Url = c.GlobalString("url")
+	}
+
+	if c.GlobalBool("force") {
+		cfs.Option.NoCache = true
 	}
 }
 
@@ -155,8 +163,15 @@ func doUpload(c *cli.Context) {
 		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
-	bucket, err := cfs.BucketFromFile(bucketPath)
-	check(err)
+	var err error
+	var bucket *cfs.Bucket
+	if cfs.Option.NoCache {
+		bucket = cfs.NewBucket()
+		bucket.Path = bucketPath
+	} else {
+		bucket, err = cfs.BucketFromFile(bucketPath)
+		check(err)
+	}
 	bucket.Tag = c.String("tag")
 
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)

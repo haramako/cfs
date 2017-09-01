@@ -72,6 +72,13 @@ func (c ContentAttribute) Crypted() bool {
 	return (int(c) & Crypted) != 0
 }
 
+func NewBucket() *Bucket {
+	return &Bucket{
+		Contents: make(map[string]Content),
+		HashType: "md5",
+	}
+}
+
 func BucketFromFile(path string) (*Bucket, error) {
 	b := &Bucket{
 		Path:     path,
