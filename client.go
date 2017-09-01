@@ -183,7 +183,10 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 }
 
 func (c *Client) Finish() error {
-	c.UploadBucket()
+	err := c.UploadBucket()
+	if err != nil {
+		return err
+	}
 
 	close(c.queue)
 	c.waitGroup.Wait()

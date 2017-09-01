@@ -76,7 +76,14 @@ func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrit
 }
 
 func (s *FileStorage) UploadTag(filename string, body []byte) error {
-	dataDir := filepath.Join(s.CabinetPath, "tag")
+	cabinetFilepath := s.CabinetPath
+	if isWindows() {
+		if cabinetFilepath[0] == '/' {
+			cabinetFilepath = cabinetFilepath[1:]
+		}
+	}
+
+	dataDir := filepath.Join(cabinetFilepath, "tag")
 	file := filepath.Join(dataDir, filename)
 
 	err := os.MkdirAll(dataDir, 0777)
