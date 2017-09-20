@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"crypto/md5"
 
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs"
@@ -159,7 +160,8 @@ func doUpload(c *cli.Context) {
 		}
 		filename := cfs.Option.Cabinet + "$" + cwd + "$" + strings.Join(absDirs, "$")
 		filename = escapeFilename(filename)
-		println(filename)
+		filename = fmt.Sprintf("%x", md5.Sum([]byte(filename)))
+		// println("cachefile = " + filename)
 		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
