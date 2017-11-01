@@ -9,6 +9,7 @@ import (
 )
 
 var globalCacheDir string
+var globalDataCacheDir string
 
 // CFSのキャッシュディレクトリを取得する
 // ~/.cfs/cache がなければ作成してそれを返す
@@ -26,6 +27,24 @@ func GlobalCacheDir() string {
 		}
 	}
 	return globalCacheDir
+}
+
+// CFSのデータキャッシュディレクトリを取得する
+// ~/.cfs/data がなければ作成してそれを返す
+func GlobalDataCacheDir() string {
+	if globalDataCacheDir != "" {
+		return globalDataCacheDir
+	}
+
+	globalDataCacheDir := filepath.Join(HomeDir(), "datacache")
+	_, err := os.Stat(globalDataCacheDir)
+	if !os.IsExist(err) {
+		err := os.MkdirAll(globalDataCacheDir, 0777)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return globalDataCacheDir
 }
 
 // ユーザーのホームディレクトリを取得する

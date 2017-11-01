@@ -87,14 +87,31 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		return nil, fmt.Errorf("cannot fetch data, %s is not a hash", hash)
 	}
 
-	fetchUrl, err := d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
-	if err != nil {
-		return nil, err
-	}
+	var data []byte
 
-	data, err := fetch(fetchUrl)
-	if err != nil {
-		return nil, err
+	cache := filepath.Join(GlobalDataCacheDir(), hash)
+	_, err := os.Stat(cache)
+	if os.IsExist(err) {
+		data, err = ioutil.ReadFile(cache)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+
+		fetchUrl, err := d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
+		if err != nil {
+			return nil, err
+		}
+
+		data, err = fetch(fetchUrl)
+		if err != nil {
+			return nil, err
+		}
+
+		err = ioutil.WriteFile(cache, data, 0666)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return decode(data, Option.EncryptKey, Option.EncryptIv, attr)
