@@ -91,7 +91,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 
 	cache := filepath.Join(GlobalDataCacheDir(), hash)
 	_, err := os.Stat(cache)
-	if os.IsExist(err) {
+	if !os.IsNotExist(err) {
 		data, err = ioutil.ReadFile(cache)
 		if err != nil {
 			return nil, err

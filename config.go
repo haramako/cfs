@@ -20,7 +20,7 @@ func GlobalCacheDir() string {
 
 	globalCacheDir := filepath.Join(HomeDir(), "cache")
 	_, err := os.Stat(globalCacheDir)
-	if !os.IsExist(err) {
+	if os.IsNotExist(err) {
 		err := os.MkdirAll(globalCacheDir, 0777)
 		if err != nil {
 			panic(err)
@@ -38,7 +38,7 @@ func GlobalDataCacheDir() string {
 
 	globalDataCacheDir := filepath.Join(HomeDir(), "datacache")
 	_, err := os.Stat(globalDataCacheDir)
-	if !os.IsExist(err) {
+	if os.IsNotExist(err) {
 		err := os.MkdirAll(globalDataCacheDir, 0777)
 		if err != nil {
 			panic(err)
