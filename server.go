@@ -287,7 +287,7 @@ func (s *Server) Start() {
 	r := gin.Default()
 
 	r.StaticFS("/data", http.Dir(filepath.Join(s.RootFilepath, "data")))
-	r.StaticFS("/assets", http.Dir("./assets"))
+	r.StaticFS("/assets", http.Dir("assets"))
 
 	var api, ui gin.IRoutes
 	if s.AdminUser != "" {
@@ -311,7 +311,7 @@ func (s *Server) Start() {
 	}
 
 	ui.GET("/*dummy", func(c *gin.Context) {
-		file, err := ioutil.ReadFile("./assets/index.html")
+		file, err := ioutil.ReadFile(filepath.Join("assets", "index.html"))
 		if err != nil {
 			c.AbortWithError(500, err)
 			return
