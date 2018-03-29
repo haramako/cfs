@@ -1,5 +1,6 @@
 builds:
-  - binary: cfs
+  - main: cmd/cfs/main.go
+    binary: cfs
     goos:
       - windows
       - darwin
@@ -11,7 +12,3 @@ archive:
   name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
   files:
     - README.md
-release:
-  github:
-    owner: harada@toydea.com
-    name: harada@toydea.com

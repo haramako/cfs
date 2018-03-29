@@ -13,3 +13,4 @@ gin-bin
 /**/Godeps/Readme
 /**/Godeps/_workspace
 /.vscode
+/dist
