@@ -2,6 +2,7 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"crypto/md5"
 
 	"github.com/codegangsta/cli"
 	"github.com/haramako/cfs"
@@ -50,6 +50,7 @@ func main() {
 		catCommand,
 		lsCommand,
 		configCommand,
+		httpCommand,
 	}
 
 	err := app.Run(os.Args)
