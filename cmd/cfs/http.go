@@ -23,27 +23,47 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-	println(r.URL.String())
+	defer func() {
+		err := recover()
+		if err != nil {
+			fmt.Printf("ERR:%v\n", err)
+		}
+	}()
+
+	path := r.URL.String()[1:]
 	dotPos := strings.Index(r.Host, ".")
 	var subdomain string
+	println(r.Host)
 	if dotPos > 0 {
 		subdomain = r.Host[0:dotPos]
 	} else {
-		subdomain = "(unknown)"
+		slashPos := strings.Index(path, "/")
+		println("a", path)
+		if slashPos > 0 {
+			subdomain = path[0:slashPos]
+			path = path[slashPos+1:]
+		}
 	}
+	fmt.Printf("%v|%v\n", subdomain, path)
 
 	host := "http://cfs-autotest.s3-website-ap-northeast-1.amazonaws.com/"
 	location := subdomain
-	filename := r.URL.String()[1:]
+	filename := path
 
 	filename, err := url.QueryUnescape(filename)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 
 	downloader, err := cfs.NewDownloader(host)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 
 	bucket, err := downloader.LoadBucket(location)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 
 	content, ok := bucket.Contents[filename]
 	if !ok {
@@ -57,9 +77,10 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", amime)
 
-	fmt.Println(content)
 	data, err := downloader.Fetch(content.Hash, content.Attr)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 
 	w.Write(data)
 }
