@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 type uploadRequest struct {
@@ -77,6 +79,9 @@ func (c *Client) Upload(filename string, origHash string, origData []byte, attr 
 
 func (c *Client) AddFiles(root string) error {
 	return filepath.Walk(root, func(path2 string, info os.FileInfo, err error) error {
+		// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
+		path2 = norm.NFC.String(path2)
+
 		if err != nil {
 			return err
 		}
