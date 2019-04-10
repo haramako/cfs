@@ -97,7 +97,7 @@ func (c *Client) AddFiles(root string) error {
 		base := filepath.Base(path2)
 		if strings.HasPrefix(base, ".") || strings.HasPrefix(base, "#") ||
 			strings.HasSuffix(base, "~") ||
-			ext == ".meta" || ext == ".manifest" || ext == ".tmx" || ext == ".png" {
+			ext == ".meta" || ext == ".manifest" || ext == ".tmx" {
 			return nil
 		}
 
