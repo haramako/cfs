@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 	"github.com/haramako/cfs"
 )
 
@@ -365,7 +365,7 @@ func doLs(c *cli.Context) {
 
 	for _, k := range keys {
 		file := bucket.Contents[k]
-		fmt.Printf("%-40s %s %s\n", file.Path, file.Hash, file.Time.Format(time.RFC3339))
+		fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
 	}
 
 }
