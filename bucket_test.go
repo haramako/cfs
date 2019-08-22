@@ -18,8 +18,6 @@ var timeCount = int64(0)
 func TestMain(m *testing.M) {
 	Option.EncryptKey = "12345678901234567890123456789012"
 	Option.EncryptIv = "1234567890123456"
-	Option.AdminUser = "admin"
-	Option.AdminPass = "pass"
 
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true

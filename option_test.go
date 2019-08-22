@@ -1,7 +1,6 @@
 package cfs
 
 import (
-	//"fmt"
 	"testing"
 )
 

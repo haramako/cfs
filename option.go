@@ -22,9 +22,6 @@ type OptionInfo struct {
 
 	// Google Cloud Storage setting
 
-	// Server settings
-	AdminUser string
-	AdminPass string
 }
 
 var Option = &OptionInfo{
