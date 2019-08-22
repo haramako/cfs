@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"crypto/md5"
-	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -53,6 +52,7 @@ type Content struct {
 	Touched  bool
 }
 
+// DefaultContentAttribute デフォルトのContentAttributeを取得する
 func DefaultContentAttribute() ContentAttribute {
 	var result ContentAttribute
 	if Option.Compress {
@@ -64,6 +64,7 @@ func DefaultContentAttribute() ContentAttribute {
 	return ContentAttribute(result)
 }
 
+// Compressed 圧縮するかどうかを返す
 func (c ContentAttribute) Compressed() bool {
 	return (int(c) & Compressed) != 0
 }
@@ -134,7 +135,7 @@ func (b *Bucket) Parse(s []byte) error {
 	return nil
 }
 
-// bにfromの内容をマージする
+// Merge bにfromの内容をマージする
 // 両方に存在する場合は、fromの内容で上書きされる
 func (b *Bucket) Merge(from *Bucket) {
 	for _, c := range from.Contents {
@@ -146,7 +147,7 @@ func (b *Bucket) Sum(data []byte) string {
 	switch b.HashType {
 	case "sha1":
 		panic("not supported")
-		return fmt.Sprintf("%x", sha1.Sum(data))
+		//return fmt.Sprintf("%x", sha1.Sum(data))
 	case "md5":
 		return fmt.Sprintf("%x", md5.Sum(data))
 	default:
@@ -168,6 +169,7 @@ func (b *Bucket) RemoveUntouched() {
 	b.Contents = newContents
 }
 
+// Dump は、Bucketの内容をダンプする
 func (b *Bucket) Dump() string {
 	keys := []string{}
 	for k := range b.Contents {
