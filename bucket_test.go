@@ -25,31 +25,7 @@ func TestMain(m *testing.M) {
 		Verbose = true
 	}
 
-	initServer()
-
 	os.Exit(m.Run())
-}
-
-func initServer() {
-	if os.Getenv("CFS_TEST_STORAGE") == "cfs" {
-		tempDir, err := ioutil.TempDir("", "cfs-cfssv")
-		if err != nil {
-			panic(err)
-		}
-
-		sv := &Server{
-			RootFilepath: tempDir,
-			Port:         9999,
-			AdminUser:    "admin",
-			AdminPass:    "pass",
-		}
-		err = sv.Init()
-		if err != nil {
-			panic(err)
-		}
-		go sv.Start()
-		time.Sleep(100 * time.Millisecond) // サーバーが起動するまで待つ
-	}
 }
 
 func setupBucket() (*Client, *Bucket, string) {
