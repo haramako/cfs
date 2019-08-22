@@ -13,12 +13,6 @@ type Storage interface {
 
 func StorageFromUrl(cabinetUrl *url.URL) (Storage, error) {
 	switch cabinetUrl.Scheme {
-	case "http", "https":
-		return NewCfsStorage(cabinetUrl)
-	case "cfs":
-		httpUrl := *cabinetUrl
-		httpUrl.Scheme = "http"
-		return NewCfsStorage(&httpUrl)
 	case "gs":
 		storage, err := NewGcsStorage(cabinetUrl.Host)
 		if err != nil {

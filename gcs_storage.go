@@ -64,9 +64,9 @@ func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite
 		fmt.Println(err)
 		return err
 	}
-	//if Verbose {
-	fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
-	//}
+	if Verbose {
+		fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
+	}
 	return nil
 }
 
