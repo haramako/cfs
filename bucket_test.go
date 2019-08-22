@@ -212,6 +212,8 @@ func TestOverwriteFile(t *testing.T) {
 }
 
 func TestCompress(t *testing.T) {
+	t.Skip() // "diff"コマンドがないとだめなため
+
 	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge", "piyo")
