@@ -169,9 +169,9 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		return false, err
 	}
 
-	//if Verbose {
-	fmt.Printf("changed file %-12s (%s)\n", relative, hash)
-	//}
+	if Verbose {
+		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
+	}
 
 	b.Contents[key] = Content{
 		Path:     key,

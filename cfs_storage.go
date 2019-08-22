@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
 	//"net/url"
 	"net/url"
 	"path"
@@ -43,9 +44,9 @@ func (s *CfsStorage) Upload(filename string, hash string, body []byte, overwrite
 
 	//b.UploadCount++
 
-	//if Verbose {
-	fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
-	//}
+	if Verbose {
+		fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
+	}
 
 	return nil
 }

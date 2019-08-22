@@ -68,9 +68,9 @@ func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrit
 		return err
 	}
 
-	//if Verbose {
-	fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
-	//}
+	if Verbose {
+		fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
+	}
 
 	return nil
 }
@@ -96,9 +96,9 @@ func (s *FileStorage) UploadTag(filename string, body []byte) error {
 		return err
 	}
 
-	//if Verbose {
-	fmt.Printf("uploading tag '%s'\n", filename)
-	//}
+	if Verbose {
+		fmt.Printf("uploading tag '%s'\n", filename)
+	}
 
 	return nil
 }
