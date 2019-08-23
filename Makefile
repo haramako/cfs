@@ -18,7 +18,7 @@ test: test-file test-s3 test-gcs
 
 test-file:
 	go test
-
+	
 test-cfs:
 	CFS_TEST_STORAGE=cfs go test
 
