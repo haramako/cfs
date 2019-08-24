@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 
+	"github.com/haramako/cfs"
 	"github.com/haramako/cfs/pack"
 	"github.com/urfave/cli"
 )
@@ -29,51 +33,54 @@ func doUnpack(c *cli.Context) {
 
 	var args = c.Args()
 
+	if len(args) != 1 {
+		fmt.Println("need just 1 arguments")
+		os.Exit(1)
+	}
+
 	packfile := args[0]
 
 	f, err := os.Open(packfile)
+	defer f.Close()
 	check(err)
 
 	pak, err := pack.Parse(f)
 	check(err)
 
+	pak, err = filterPackFile(filter, pak)
+	check(err)
+
 	if c.String("o") != "" {
-		// TODO
-		if len(args) != 2 {
-			fmt.Println("need just 2 arguments")
-			os.Exit(1)
-		}
-	} else {
-		if len(args) != 1 {
-			fmt.Println("need just 1 arguments")
-			os.Exit(1)
+		maxSize := 0
+		for _, e := range pak.Entries {
+			if e.Size > maxSize {
+				maxSize = e.Size
+			}
 		}
 
-		entries := pak.Entries
-		if filter != "" {
-			files := make([]string, 0, len(entries))
-			for _, e := range entries {
-				files = append(files, e.Path)
+		buf := make([]byte, maxSize)
+		for _, e := range pak.Entries {
+			if cfs.Verbose {
+				fmt.Printf("%s\n", e.Path)
 			}
-			files, err := runFilter(filter, files)
+
+			outdir := c.String("o")
+
+			outPath := filepath.Join(outdir, e.Path)
+			err := os.MkdirAll(filepath.Dir(outPath), 0777)
 			check(err)
 
-			fileDict := make(map[string]bool, len(entries))
-			for _, f := range files {
-				fileDict[f] = true
-			}
+			_, err = f.Seek(int64(e.Pos), io.SeekStart)
+			check(err)
 
-			newEntries := make([]pack.Entry, 0, len(entries))
-			for _, e := range entries {
-				_, ok := fileDict[e.Path]
-				if ok {
-					newEntries = append(newEntries, e)
-				}
-			}
-			entries = newEntries
+			_, err = io.ReadFull(f, buf[:e.Size])
+			check(err)
+
+			err = ioutil.WriteFile(outPath, buf[:e.Size], 0777)
+			check(err)
 		}
-
-		for _, e := range entries {
+	} else {
+		for _, e := range pak.Entries {
 			fmt.Printf("%s\t%d\t%s\n", e.Path, e.Size, e.Hash)
 		}
 	}

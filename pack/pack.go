@@ -2,11 +2,17 @@ package pack
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"sort"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // PackFile パックファイルを表す
@@ -21,6 +27,7 @@ type Entry struct {
 	Hash string
 	Pos  int // Pos は、Write時に書き込まれるので設定不要
 	Size int
+	Data []byte
 }
 
 // PackFileVersion は現在のPackファイルのバージョン
@@ -62,7 +69,8 @@ func Parse(r io.Reader) (*PackFile, error) {
 
 }
 
-func Write(w io.Writer, pack *PackFile) error {
+// Pack PackFileをファイルに書き込む
+func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 	_, err := w.Write(encodeHeader())
 	if err != nil {
 		return err
@@ -92,29 +100,61 @@ func Write(w io.Writer, pack *PackFile) error {
 		return err
 	}
 
-	return nil
-}
-
-// Pack バケットからPackファイルを作成する
-/*
-func Pack(d *Downloader, b *Bucket) ([]byte, error) {
-	for _, c := range b.Contents {
-
-		data, err := d.Fetch(c.Hash, c.Attr)
-		if err != nil {
-			return nil, err
+	if fn == nil {
+		for _, e := range pack.Entries {
+			if e.Data == nil {
+				return fmt.Errorf("invalid data in %s", e.Path)
+			}
+			size, err := w.Write(e.Data)
+			if err != nil || int(size) != e.Size {
+				return err
+			}
 		}
-
-		_ = data
-
+	} else {
+		for _, e := range pack.Entries {
+			fr := fn(e.Path)
+			size, err := io.Copy(w, fr)
+			if err != nil || int(size) != e.Size {
+				return err
+			}
+		}
 	}
-	return nil, nil
-}
 
-func writeToPack(w io.Writer, b *Bucket, f func(string) []byte) error {
 	return nil
 }
-*/
+
+// NewPackFileFromDir ディレクトリを指定して、パックファイルを作成する
+func NewPackFileFromDir(dir string) (*PackFile, error) {
+	entries := []Entry{}
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
+		path = norm.NFC.String(path)
+		if !info.IsDir() {
+			entryPath := filepath.ToSlash(path[len(dir)+1:])
+
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			hash := fmt.Sprintf("%x", md5.Sum(data))
+
+			println(entryPath, info.Size())
+
+			entries = append(entries, Entry{
+				Path: entryPath,
+				Hash: hash,
+				Size: int(info.Size()),
+				Data: data,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
+}
 
 func encodeHeader() []byte {
 	return []byte{byte('T'), byte('P'), PackFileVersion}
