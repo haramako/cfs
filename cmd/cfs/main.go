@@ -42,6 +42,10 @@ func main() {
 			Name:  "force, f",
 			Usage: "force upload(use no cache)",
 		},
+		cli.StringFlag{
+			Name:  "filter-cmd",
+			Usage: "command for filter files",
+		},
 	}
 	app.Commands = []cli.Command{
 		uploadCommand,
@@ -51,6 +55,8 @@ func main() {
 		lsCommand,
 		configCommand,
 		httpCommand,
+		packCommand,
+		unpackCommand,
 	}
 
 	err := app.Run(os.Args)
@@ -61,9 +67,9 @@ func main() {
 
 func check(err error) {
 	if err != nil {
-		//panic(err)
-		fmt.Println(err)
-		os.Exit(1)
+		panic(err)
+		//fmt.Println(err)
+		//os.Exit(1)
 	}
 }
 

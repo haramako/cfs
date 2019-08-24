@@ -8,9 +8,9 @@ import (
 func TestPack(t *testing.T) {
 	hash := "0123456789abcdef0123456789abcdef"
 	entries := []Entry{
-		{path: "hoge", hash: hash, pos: 0, size: 1},
-		{path: "fugafuga", hash: hash, pos: 0, size: 100},
-		{path: "piyo", hash: hash, pos: 0, size: 0},
+		{Path: "hoge", Hash: hash, Size: 1},
+		{Path: "fugafuga", Hash: hash, Size: 100},
+		{Path: "piyo", Hash: hash, Size: 0},
 	}
 	w := bytes.NewBuffer(nil)
 	origPack := NewPackFile(entries)
