@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"sort"
 )
 
 // PackFile パックファイルを表す
@@ -27,8 +28,13 @@ const PackFileVersion = 1
 // 標準的に使用するエンディアン
 var endian = binary.LittleEndian
 
-// Unpack
-func Unpack(r io.Reader) (*PackFile, error) {
+// NewPackFile PackFileを新規に作成する
+func NewPackFile(entries []Entry) *PackFile {
+	return &PackFile{Version: PackFileVersion, Entries: entries}
+}
+
+// Parse PackファイルをParseする
+func Parse(r io.Reader) (*PackFile, error) {
 	err := decodeHeader(r)
 	if err != nil {
 		return nil, err
@@ -40,13 +46,52 @@ func Unpack(r io.Reader) (*PackFile, error) {
 		return nil, err
 	}
 
-	entries, err := decodeEntryList(r, int(entrySize))
+	entryList := make([]byte, entrySize)
+	_, err = io.ReadFull(r, entryList[:])
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := decodeEntryList(entryList, int(entrySize))
 	if err != nil {
 		return nil, err
 	}
 
 	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
 
+}
+
+func Write(w io.Writer, pack *PackFile) error {
+	_, err := w.Write(encodeHeader())
+	if err != nil {
+		return err
+	}
+
+	// Entryをソートする
+	sort.Slice(pack.Entries, func(i, j int) bool { return pack.Entries[i].path < pack.Entries[j].path })
+
+	// EntryListのサイズを取得する
+	dummyEntry, err := encodeEntryList(pack.Entries, 0)
+	if err != nil {
+		return err
+	}
+
+	entry, err := encodeEntryList(pack.Entries, 3+4+len(dummyEntry))
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(w, endian, uint32(len(entry)))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(entry)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Pack バケットからPackファイルを作成する
@@ -70,28 +115,35 @@ func writeToPack(w io.Writer, b *Bucket, f func(string) []byte) error {
 }
 */
 
-func encodeHeader(entries []Entry) []byte {
+func encodeHeader() []byte {
 	return []byte{byte('T'), byte('P'), PackFileVersion}
 }
 
-func encodePackEntryList(entries []Entry) ([]byte, error) {
-	s := bytes.NewBuffer(nil)
+func encodeEntryList(entries []Entry, bodyPos int) ([]byte, error) {
+	w := bytes.NewBuffer(nil)
+	pos := bodyPos
+
+	/*
+		err := binary.Write(w, endian, uint32(len(entries)))
+		if err != nil {
+			return nil, err
+		}
+	*/
 
 	for _, e := range entries {
-		binary.Write(s, endian, byte(len(e.path)))
-		s.Write([]byte(e.path))
-		binary.Write(s, endian, uint32(e.pos))
-		binary.Write(s, endian, uint32(e.size))
+		binary.Write(w, endian, byte(len(e.path)))
+		w.Write([]byte(e.path))
+		binary.Write(w, endian, uint32(e.pos))
+		binary.Write(w, endian, uint32(e.size))
 		hashBytes, err := hex.DecodeString(e.hash)
 		if err != nil {
 			return nil, err
 		}
-		s.Write(hashBytes)
+		w.Write(hashBytes)
+		pos += e.size
 	}
 
-	buf := s.Bytes()
-
-	return buf, nil
+	return w.Bytes(), nil
 }
 
 func decodeHeader(r io.Reader) error {
@@ -110,10 +162,20 @@ func decodeHeader(r io.Reader) error {
 	return nil
 }
 
-func decodeEntryList(r io.Reader, entryCount int) ([]Entry, error) {
-	entries := make([]Entry, 0, entryCount)
+func decodeEntryList(bin []byte, entrySize int) ([]Entry, error) {
+	r := bytes.NewBuffer(bin)
 
-	for i := 0; i < entryCount; i++ {
+	/*
+		var entryCount uint32
+		err := binary.Read(r, endian, entryCount)
+		if err != nil {
+			return nil, err
+		}
+	*/
+
+	entries := []Entry{}
+
+	for {
 		var pathLen byte
 		var pathBytes [256]byte
 		var pos uint32
@@ -122,7 +184,11 @@ func decodeEntryList(r io.Reader, entryCount int) ([]Entry, error) {
 
 		err := binary.Read(r, endian, &pathLen)
 		if err != nil {
-			return nil, err
+			if err == io.EOF {
+				break
+			} else {
+				return nil, err
+			}
 		}
 
 		_, err = io.ReadFull(r, pathBytes[:pathLen])
