@@ -97,6 +97,7 @@ func BucketFromFile(path string) (*Bucket, error) {
 		}
 	}
 	return b, nil
+
 }
 
 func (b *Bucket) Parse(s []byte) error {

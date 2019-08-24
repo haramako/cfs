@@ -27,6 +27,7 @@ github.com/googleapis/gax-go/v2 v2.0.5 h1:sjZBwGj9Jlw33ImPtvFviGYvseOtDM7hkSKB7+
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
 github.com/haramako/cfs v0.1.1 h1:NegcGtjrSDPE2fFBv8mIwKykzLF9lTHdHEcvgb4at8o=
 github.com/haramako/cfs v0.1.1/go.mod h1:kyeWNwIq5T2xNPSzgIxJJ2OiTxrvMeZmRgmX4IpcXNQ=
+github.com/haramako/cfs/cmd/cfs v0.0.0-20190822171241-f859c282a011/go.mod h1:YLb8SI7tS6Evlfo6Nsq1B5Mfz3nXBCY+Sjg4YZ20gvA=
 github.com/hashicorp/golang-lru v0.5.0/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ4Ao+sR/qLZy8=
 github.com/hashicorp/golang-lru v0.5.1 h1:0hERBMJE1eitiLkihrMvRVBYAkpHzc/J3QdDN+dAcgU=
 github.com/hashicorp/golang-lru v0.5.1/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ4Ao+sR/qLZy8=

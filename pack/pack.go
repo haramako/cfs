@@ -9,21 +9,43 @@ import (
 )
 
 // PackFile パックファイルを表す
-type packFile struct {
-	Version      int
-	Entries      []packEntry
-	BodyPosition int
+type PackFile struct {
+	Version int
+	Entries []Entry
 }
 
-type packEntry struct {
+type Entry struct {
 	path string
 	hash string
 	pos  int
 	size int
 }
 
-func Unpack(r io.Reader) (*packFile, error) {
-	return nil, nil
+// PackFileVersion は現在のPackファイルのバージョン
+const PackFileVersion = 1
+
+// 標準的に使用するエンディアン
+var endian = binary.LittleEndian
+
+// Unpack
+func Unpack(r io.Reader) (*PackFile, error) {
+	err := decodeHeader(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var entrySize uint32
+	err = binary.Read(r, endian, &entrySize)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := decodeEntryList(r, int(entrySize))
+	if err != nil {
+		return nil, err
+	}
+
+	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
 
 }
 
@@ -48,13 +70,12 @@ func writeToPack(w io.Writer, b *Bucket, f func(string) []byte) error {
 }
 */
 
-func encodePackHeader(entries []packEntry) []byte {
-	return []byte{byte('T'), byte('P'), 1}
+func encodeHeader(entries []Entry) []byte {
+	return []byte{byte('T'), byte('P'), PackFileVersion}
 }
 
-func encodePackEntryList(entries []packEntry) ([]byte, error) {
+func encodePackEntryList(entries []Entry) ([]byte, error) {
 	s := bytes.NewBuffer(nil)
-	endian := binary.LittleEndian
 
 	for _, e := range entries {
 		binary.Write(s, endian, byte(len(e.path)))
@@ -73,21 +94,24 @@ func encodePackEntryList(entries []packEntry) ([]byte, error) {
 	return buf, nil
 }
 
-func decodePackHeader(b []byte) error {
-	if b[0] != byte('T') || b[1] != byte('P') {
+func decodeHeader(r io.Reader) error {
+	var header [3]byte
+	_, err := io.ReadFull(r, header[:])
+	if err != nil {
+		return err
+	}
+
+	if header[0] != byte('T') || header[1] != byte('P') {
 		return fmt.Errorf("Invalid file header, magic")
 	}
-	if b[2] != 1 {
+	if header[2] != PackFileVersion {
 		return fmt.Errorf("Invalid file header, version")
 	}
 	return nil
 }
 
-func decodePackEntryList(b []byte, entryCount int) ([]packEntry, error) {
-	s := bytes.NewBuffer(b)
-	endian := binary.LittleEndian
-
-	entries := make([]packEntry, 0, entryCount)
+func decodeEntryList(r io.Reader, entryCount int) ([]Entry, error) {
+	entries := make([]Entry, 0, entryCount)
 
 	for i := 0; i < entryCount; i++ {
 		var pathLen byte
@@ -96,32 +120,32 @@ func decodePackEntryList(b []byte, entryCount int) ([]packEntry, error) {
 		var size uint32
 		var hash [16]byte
 
-		err := binary.Read(s, endian, &pathLen)
+		err := binary.Read(r, endian, &pathLen)
 		if err != nil {
 			return nil, err
 		}
 
-		_, err = s.Read(pathBytes[:pathLen])
+		_, err = io.ReadFull(r, pathBytes[:pathLen])
 		if err != nil {
 			return nil, err
 		}
 
-		err = binary.Read(s, endian, &pos)
+		err = binary.Read(r, endian, &pos)
 		if err != nil {
 			return nil, err
 		}
 
-		err = binary.Read(s, endian, &size)
+		err = binary.Read(r, endian, &size)
 		if err != nil {
 			return nil, err
 		}
 
-		_, err = s.Read(hash[:])
+		_, err = io.ReadFull(r, hash[:])
 		if err != nil {
 			return nil, err
 		}
 
-		entries = append(entries, packEntry{
+		entries = append(entries, Entry{
 			path: string(pathBytes[:pathLen]),
 			hash: hex.EncodeToString(hash[:]),
 			pos:  int(pos),
