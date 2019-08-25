@@ -1,12 +1,17 @@
 package cfs
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"github.com/natefinch/atomic"
+	"golang.org/x/sync/errgroup"
 )
 
 type Downloader struct {
@@ -74,11 +79,45 @@ func (d *Downloader) Sync(b *Bucket, dir string) error {
 			return err
 		}
 
-		err = ioutil.WriteFile(filepath.Join(dir, filepath.FromSlash(c.Path)), data, 0666)
+		err = atomic.WriteFile(filepath.Join(dir, filepath.FromSlash(c.Path)), bytes.NewBuffer(data))
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func (d *Downloader) FetchAll(b *Bucket) error {
+	ch := make(chan Content)
+	eg, ctx := errgroup.WithContext(context.TODO())
+	ctx, cancel := context.WithCancel(ctx)
+	for i := 0; i < 32; i++ {
+		eg.Go(func() error {
+			for c := range ch {
+				if Verbose {
+					fmt.Printf("downloading %s\n", c.Path)
+				}
+
+				_, err := d.Fetch(c.Hash, c.Attr)
+				if err != nil {
+					cancel()
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	for _, c := range b.Contents {
+		ch <- c
+	}
+	close(ch)
+
+	err := eg.Wait()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -108,7 +147,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 			return nil, err
 		}
 
-		err = ioutil.WriteFile(cache, data, 0666)
+		err = atomic.WriteFile(cache, bytes.NewBuffer(data))
 		if err != nil {
 			return nil, err
 		}

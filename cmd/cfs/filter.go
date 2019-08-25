@@ -7,8 +7,42 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/haramako/cfs"
 	"github.com/haramako/cfs/pack"
 )
+
+func filterBucket(cmd string, b *cfs.Bucket) (*cfs.Bucket, error) {
+	if cmd == "" {
+		return b, nil
+	}
+
+	entries := b.Contents
+	files := make([]string, 0, len(entries))
+	for _, e := range entries {
+		files = append(files, e.Path)
+	}
+	files, err := runFilter(cmd, files)
+	check(err)
+
+	fileDict := make(map[string]bool, len(entries))
+	for _, f := range files {
+		fileDict[f] = true
+	}
+
+	newEntries := make(map[string]cfs.Content, len(entries))
+	for _, e := range entries {
+		_, ok := fileDict[e.Path]
+		if ok {
+			newEntries[e.Path] = e
+		}
+	}
+	entries = newEntries
+
+	return &cfs.Bucket{
+		HashType: "md5",
+		Contents: entries,
+	}, nil
+}
 
 func filterPackFile(cmd string, pak *pack.PackFile) (*pack.PackFile, error) {
 	entries := pak.Entries

@@ -24,11 +24,9 @@ func doPack(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	filter := c.GlobalString("filter")
-	_ = filter
+	filter := c.GlobalString("filter-cmd")
 
 	packfile := args[0]
-	_ = packfile
 
 	dir := args[1]
 
@@ -38,6 +36,11 @@ func doPack(c *cli.Context) {
 
 	pak, err := pack.NewPackFileFromDir(dir)
 	check(err)
+
+	if filter != "" {
+		pak, err = filterPackFile(filter, pak)
+		check(err)
+	}
 
 	pack.Pack(w, pak, nil)
 }

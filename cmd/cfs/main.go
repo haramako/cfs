@@ -57,6 +57,7 @@ func main() {
 		httpCommand,
 		packCommand,
 		unpackCommand,
+		packBucketCommand,
 	}
 
 	err := app.Run(os.Args)
