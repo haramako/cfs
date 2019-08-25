@@ -69,5 +69,6 @@ func doPackBucket(c *cli.Context) {
 	defer w.Close()
 	check(err)
 
-	pack.Pack(w, pak, nil)
+	err = pack.Pack(w, pak, nil)
+	check(err)
 }

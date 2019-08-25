@@ -105,9 +105,14 @@ func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 			if e.Data == nil {
 				return fmt.Errorf("invalid data in %s", e.Path)
 			}
-			size, err := w.Write(e.Data)
-			if err != nil || int(size) != e.Size {
-				return err
+			if e.Size > 0 {
+				size, err := w.Write(e.Data)
+				if err != nil {
+					return err
+				}
+				if int(size) != e.Size {
+					return fmt.Errorf("invalid written size %s, expect %d but %d", e.Path, e.Size, size)
+				}
 			}
 		}
 	} else {

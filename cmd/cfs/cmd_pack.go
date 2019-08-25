@@ -42,5 +42,6 @@ func doPack(c *cli.Context) {
 		check(err)
 	}
 
-	pack.Pack(w, pak, nil)
+	err = pack.Pack(w, pak, nil)
+	check(err)
 }
