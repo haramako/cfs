@@ -65,7 +65,7 @@ func doPackBucket(c *cli.Context) {
 	pak, err := packFromBucket(bucket, downloader)
 	check(err)
 
-	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY, 0777)
+	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	defer w.Close()
 	check(err)
 

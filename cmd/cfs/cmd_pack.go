@@ -30,7 +30,7 @@ func doPack(c *cli.Context) {
 
 	dir := args[1]
 
-	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY, 0777)
+	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	defer w.Close()
 	check(err)
 

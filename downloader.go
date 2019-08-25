@@ -88,19 +88,26 @@ func (d *Downloader) Sync(b *Bucket, dir string) error {
 }
 
 func (d *Downloader) FetchAll(b *Bucket) error {
-	ch := make(chan Content)
-	eg, ctx := errgroup.WithContext(context.TODO())
+	limit := make(chan struct{}, 32)
+	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
-	for i := 0; i < 32; i++ {
+	println(len(b.Contents))
+	for _, c := range b.Contents {
+		c := c
 		eg.Go(func() error {
-			for c := range ch {
+			limit <- struct{}{}
+			defer func() { <-limit }()
+
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
 				if Verbose {
 					fmt.Printf("downloading %s\n", c.Path)
 				}
 
 				_, err := d.Fetch(c.Hash, c.Attr)
 				if err != nil {
-					cancel()
 					return err
 				}
 			}
@@ -108,12 +115,8 @@ func (d *Downloader) FetchAll(b *Bucket) error {
 		})
 	}
 
-	for _, c := range b.Contents {
-		ch <- c
-	}
-	close(ch)
-
 	err := eg.Wait()
+	cancel()
 	if err != nil {
 		return err
 	}
