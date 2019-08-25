@@ -61,13 +61,17 @@ func (s *S3Storage) Upload(filename string, hash string, body []byte, overwrite 
 		}
 	}
 
-	err := s.bucket.Put(path, body, "binary/octet-stream", s3.BucketOwnerFull, s3.Options{})
-	if err != nil {
-		return err
+	// TODO: sizeが0だとエラーになるため、送信しないようにしている
+	if len(body) > 0 {
+		err := s.bucket.Put(path, body, "binary/octet-stream", s3.BucketOwnerFull, s3.Options{})
+		if err != nil {
+			return err
+		}
+		if Verbose {
+			fmt.Printf("uploading '%s'\n", path)
+		}
 	}
-	if Verbose {
-		fmt.Printf("uploading '%s'\n", path)
-	}
+
 	return nil
 }
 
