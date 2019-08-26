@@ -91,7 +91,7 @@ func (d *Downloader) FetchAll(b *Bucket) error {
 	limit := make(chan struct{}, 32)
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
-	println(len(b.Contents))
+
 	for _, c := range b.Contents {
 		c := c
 		eg.Go(func() error {

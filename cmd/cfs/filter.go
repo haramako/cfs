@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/haramako/cfs"
@@ -81,12 +83,15 @@ func runFilter(cmdStr string, files []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return strings.Split(strings.TrimRight(out, "\n"), "\n"), nil
+	lf := regexp.MustCompile("\r\n|\n\r|\n|\r")
+	return lf.Split(strings.TrimRight(out, "\n"), -1), nil
 }
 
 func runCommand(cmdStr string, input string) (string, error) {
 	commands := strings.Split(cmdStr, " ")
 	cmd := exec.Command(commands[0], commands[1:]...)
+
+	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
 	check(err)

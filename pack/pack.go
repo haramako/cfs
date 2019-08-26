@@ -85,12 +85,12 @@ func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 		return err
 	}
 
-	entry, err := encodeEntryList(pack.Entries, 3+4+len(dummyEntry))
+	err = binary.Write(w, endian, uint32(len(dummyEntry)))
 	if err != nil {
 		return err
 	}
 
-	err = binary.Write(w, endian, uint32(len(entry)))
+	entry, err := encodeEntryList(pack.Entries, 3+4+len(dummyEntry))
 	if err != nil {
 		return err
 	}
@@ -143,8 +143,6 @@ func NewPackFileFromDir(dir string) (*PackFile, error) {
 			}
 			hash := fmt.Sprintf("%x", md5.Sum(data))
 
-			println(entryPath, info.Size())
-
 			entries = append(entries, Entry{
 				Path: entryPath,
 				Hash: hash,
@@ -174,7 +172,9 @@ func encodeEntryList(entries []Entry, bodyPos int) ([]byte, error) {
 		return nil, err
 	}
 
-	for _, e := range entries {
+	for i, e := range entries {
+		e.Pos = int(pos)
+		entries[i].Pos = int(pos)
 		binary.Write(w, endian, byte(len(e.Path)))
 		w.Write([]byte(e.Path))
 		binary.Write(w, endian, uint32(e.Pos))
