@@ -280,6 +280,13 @@ func doMerge(c *cli.Context) {
 		merged.Merge(bucket)
 	}
 
+	filter := c.GlobalString("filter-cmd")
+
+	if filter != "" {
+		merged, err = filterBucket(filter, merged)
+		check(err)
+	}
+
 	if cfs.Verbose {
 		fmt.Printf("total %d files into %s\n", len(merged.Contents), mergeTo)
 	}
