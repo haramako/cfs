@@ -43,6 +43,7 @@ func filterBucket(cmd string, b *cfs.Bucket) (*cfs.Bucket, error) {
 	return &cfs.Bucket{
 		HashType: "md5",
 		Contents: entries,
+		Tag:      b.Tag,
 	}, nil
 }
 
