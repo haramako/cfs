@@ -154,8 +154,6 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		}
 	}
 
-	println(relative)
-
 	origData, err := ioutil.ReadFile(fullPath)
 	if err != nil {
 		return false, err
@@ -164,6 +162,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 	origHash := b.Sum(origData)
 	if found && old.OrigHash == origHash {
 		old.Time = info.ModTime() // 時間だけ更新する
+		old.Touched = true
 		b.Contents[key] = old
 		return false, nil
 	}
