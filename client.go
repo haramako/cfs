@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/text/unicode/norm"
 )
@@ -148,10 +149,12 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 			Attr:     old.Attr,
 			Touched:  true,
 		}
-		if !info.ModTime().After(old.Time) {
+		if !info.ModTime().After(old.Time.Add(time.Second)) && info.Size() == int64(old.OrigSize) { // ファイルシステムによって誤差があるため、１秒追加する
 			return false, nil
 		}
 	}
+
+	println(relative)
 
 	origData, err := ioutil.ReadFile(fullPath)
 	if err != nil {
@@ -160,6 +163,8 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 
 	origHash := b.Sum(origData)
 	if found && old.OrigHash == origHash {
+		old.Time = info.ModTime() // 時間だけ更新する
+		b.Contents[key] = old
 		return false, nil
 	}
 
