@@ -107,13 +107,8 @@ func runCommand(cmdStr string, input string) (string, error) {
 	stdout, err := cmd.StdoutPipe()
 	check(err)
 
-	outbuf := bytes.NewBuffer(nil)
-	go func() {
-		_, err = io.Copy(outbuf, stdout)
-		check(err)
-		err = stdout.Close()
-		check(err)
-	}()
+	var outbuf bytes.Buffer
+	cmd.Stdout = &outbuf
 
 	err = cmd.Start()
 	check(err)
