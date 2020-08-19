@@ -18,6 +18,13 @@ var httpCommand = cli.Command{
 	Name:   "http",
 	Usage:  "HTTP Server",
 	Action: doHTTP,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "port, p",
+			Value: "",
+			Usage: "using port number",
+		},
+	},
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) {
@@ -169,8 +176,15 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 func doHTTP(c *cli.Context) {
 	loadConfig(c)
 
+	port := c.String("port")
+	if port == "" {
+		port = "8000"
+	}
+
 	http.HandleFunc("/favicon.ico", handleStatic)
 	http.HandleFunc("/", handleRoot)
 
-	http.ListenAndServe("localhost:8000", nil)
+	addr := fmt.Sprintf("localhost:%s", port)
+	fmt.Printf("start server: %s\n", addr)
+	http.ListenAndServe(addr, nil)
 }
