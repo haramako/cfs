@@ -112,9 +112,6 @@ func renderFile(w http.ResponseWriter, downloader *cfs.Downloader, content cfs.C
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-
-	r.Host = "td-doc.hoge"
-
 	println(r.URL.String())
 	urlPath, err := url.QueryUnescape(r.URL.String())
 	if err != nil {
