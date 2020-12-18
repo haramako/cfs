@@ -88,7 +88,8 @@ func (d *Downloader) Sync(b *Bucket, dir string) error {
 }
 
 func (d *Downloader) FetchAll(b *Bucket) error {
-	limit := make(chan struct{}, 32)
+	const RETRY_LIMIT = 3
+	limit := make(chan struct{}, 8)
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -106,10 +107,22 @@ func (d *Downloader) FetchAll(b *Bucket) error {
 					fmt.Printf("downloading %s\n", c.Path)
 				}
 
-				_, err := d.Fetch(c.Hash, c.Attr)
-				if err != nil {
-					return err
+				retryCount := 0
+				for {
+					_, err := d.Fetch(c.Hash, c.Attr)
+					if err != nil {
+						if retryCount < RETRY_LIMIT {
+							retryCount++
+							fmt.Printf("retry for %v, retry count %d\n", err, retryCount)
+							continue
+						} else {
+							return err
+						}
+					} else {
+						break
+					}
 				}
+
 			}
 			return nil
 		})
