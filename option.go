@@ -33,6 +33,7 @@ var Option = &OptionInfo{
 	Cabinet:    "file:///var/cfs",
 }
 
+// cfsを使うときの設定ファイルを読み込む
 func LoadDefaultOptions(configFile string) {
 	if configFile == "" {
 		configFile = ".cfsenv"

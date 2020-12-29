@@ -37,6 +37,11 @@ func main() {
 			Usage: "config file",
 		},
 		cli.StringFlag{
+			Name:  "setting, S",
+			Value: ".cfs_setting",
+			Usage: "setting file",
+		},
+		cli.StringFlag{
 			Name:  "cabinet, c",
 			Value: "",
 			Usage: "cabinet URL",
@@ -57,6 +62,7 @@ func main() {
 		catCommand,
 		lsCommand,
 		configCommand,
+		settingCommand,
 		httpCommand,
 		packCommand,
 		unpackCommand,
@@ -79,6 +85,8 @@ func check(err error) {
 }
 
 func loadConfig(c *cli.Context) {
+	cfs.InitDefaultSetting()
+
 	cfs.Verbose = c.GlobalBool("V")
 	cfs.LoadDefaultOptions(c.GlobalString("config"))
 
@@ -427,4 +435,16 @@ func doConfig(c *cli.Context) {
 
 	fmt.Printf("Cabinet       : %s\n", cfs.Option.Cabinet)
 	fmt.Printf("Downloader URL: %s\n", getDownloaderURL())
+}
+
+var settingCommand = cli.Command{
+	Name:   "setting",
+	Usage:  "show current setting",
+	Action: doSetting,
+}
+
+func doSetting(c *cli.Context) {
+	loadConfig(c)
+
+	fmt.Printf("HomeRoot       : %s\n", cfs.Setting.HomeRoot)
 }
