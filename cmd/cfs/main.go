@@ -58,6 +58,7 @@ func main() {
 		packCommand,
 		unpackCommand,
 		packBucketCommand,
+		patchCommand,
 	}
 
 	err := app.Run(os.Args)

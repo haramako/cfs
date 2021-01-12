@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/haramako/cfs"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -63,6 +64,18 @@ func Parse(r io.Reader) (*PackFile, error) {
 	entries, err := decodeEntryList(entryList, int(entrySize))
 	if err != nil {
 		return nil, err
+	}
+
+	for i := range entries {
+		e := &entries[i]
+		e.Data = make([]byte, e.Size)
+		len, err := r.Read(e.Data)
+		if len != e.Size {
+			return nil, fmt.Errorf("invalid read size")
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
@@ -154,6 +167,44 @@ func NewPackFileFromDir(dir string) (*PackFile, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
+}
+
+// Patch パッチを作成する
+func Patch(base, current *PackFile) (*PackFile, error) {
+	// Make base entries map by path.
+	baseEntryMap := map[string]Entry{}
+	for _, e := range base.Entries {
+		baseEntryMap[e.Path] = e
+	}
+
+	// Make diff from base to current.
+	entries := []Entry{}
+	for _, e := range current.Entries {
+		baseEntry, found := baseEntryMap[e.Path]
+		same := false
+		if found {
+			//fmt.Printf("%v %v %v\n", e.Path, e.Hash, baseEntry.Hash)
+			if baseEntry.Hash == e.Hash {
+				same = true
+			} else {
+				if cfs.Verbose {
+					fmt.Printf("not same file path:%v, base-hash:%v, current-hash:%v\n", e.Path, baseEntry.Hash, e.Hash)
+				}
+			}
+		} else {
+			if cfs.Verbose {
+				fmt.Printf("new file %v\n", e.Path)
+			}
+		}
+
+		if !same {
+			entries = append(entries, e)
+		} else {
+			//fmt.Printf("same %v\n", e.Path)
+		}
 	}
 
 	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
