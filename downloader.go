@@ -201,6 +201,10 @@ func fetch(_url *url.URL) ([]byte, error) {
 		return nil, err
 	}
 
+	if res.StatusCode >= 400 {
+		return nil, fmt.Errorf("bad response status code %d from %v", res.StatusCode, _url)
+	}
+
 	defer res.Body.Close()
 
 	contents, err := ioutil.ReadAll(res.Body)
