@@ -15,6 +15,8 @@ import (
 	"local.package/cfs"
 )
 
+var revision string
+
 // エントリーポイント
 
 func main() {
@@ -23,6 +25,7 @@ func main() {
 	app.Name = "cfs"
 	app.HelpName = "cfs"
 	app.Usage = "cfs client"
+	app.Version = "0.0.0 " + revision
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  "verbose, V",
@@ -231,6 +234,13 @@ func doSync(c *cli.Context) {
 
 	bucket, err := downloader.LoadBucket(location)
 	check(err)
+
+	filter := c.GlobalString("filter-cmd")
+
+	if filter != "" {
+		bucket, err = filterBucket(filter, bucket)
+		check(err)
+	}
 
 	check(downloader.Sync(bucket, dir))
 }
