@@ -3,16 +3,13 @@ all: darwin linux windows
 .PHONY: all darwin linux windows test test-file test-gcs
 
 darwin:
-	cd cmd/cfssv; GOOS=darwin GOARCH=amd64 go build -o ../../bin/darwin/cfssv
-	cd cmd/cfsctl; GOOS=darwin GOARCH=amd64 go build -o ../../bin/darwin/cfsctl
+	cd cmd/cfs; GOOS=darwin GOARCH=amd64 go build -o ../../bin/darwin/cfs
 
 linux:
-	cd cmd/cfssv; GOOS=linux GOARCH=amd64 go build -o ../../bin/linux/cfssv
-	cd cmd/cfsctl; GOOS=linux GOARCH=amd64 go build -o ../../bin/linux/cfsctl
+	cd cmd/cfs; GOOS=linux GOARCH=amd64 go build -o ../../bin/linux/cfs
 
 windows:
-	cd cmd/cfssv; GOOS=windows GOARCH=amd64 go build -o ../../bin/windows/cfssv.exe
-	cd cmd/cfsctl; GOOS=windows GOARCH=amd64 go build -o ../../bin/windows/cfsctl.exe
+	cd cmd/cfs; GOOS=windows GOARCH=amd64 go build -o ../../bin/windows/cfs.exe
 
 test: test-file test-s3 test-gcs
 
