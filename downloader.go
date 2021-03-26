@@ -123,6 +123,12 @@ func (d *Downloader) FetchAll(b *Bucket) error {
 					fmt.Printf("downloading %s\n", c.Path)
 				}
 
+				// TODO: 0 bytesのファイルはアップロードがされていないため、空ファイルを作る
+				if c.Size == 0 {
+					os.Create(filepath.Join(GlobalDataCacheDir(), c.Hash))
+					return nil
+				}
+
 				retryCount := 0
 				for {
 					_, err := d.Fetch(c.Hash, c.Attr)
