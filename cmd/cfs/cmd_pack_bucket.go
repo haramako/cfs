@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/haramako/cfs"
-	"github.com/haramako/cfs/pack"
 	"github.com/urfave/cli"
+	"local.package/cfs"
+	"local.package/cfs/pack"
 )
 
 var packBucketCommand = cli.Command{

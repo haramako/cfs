@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/haramako/cfs"
-	"github.com/haramako/cfs/pack"
+	"local.package/cfs"
+	"local.package/cfs/pack"
 )
 
 func filterBucket(cmd string, b *cfs.Bucket) (*cfs.Bucket, error) {

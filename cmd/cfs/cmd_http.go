@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	"github.com/haramako/cfs"
+	"local.package/cfs"
 )
 
 var httpCommand = cli.Command{

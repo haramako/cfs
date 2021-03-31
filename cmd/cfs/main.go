@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/haramako/cfs"
 	"github.com/urfave/cli"
+	"local.package/cfs"
 )
 
 // エントリーポイント

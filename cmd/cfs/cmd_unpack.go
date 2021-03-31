@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/haramako/cfs"
-	"github.com/haramako/cfs/pack"
 	"github.com/urfave/cli"
+	"local.package/cfs"
+	"local.package/cfs/pack"
 )
 
 var unpackCommand = cli.Command{

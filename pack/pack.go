@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/haramako/cfs"
 	"golang.org/x/text/unicode/norm"
+	"local.package/cfs"
 )
 
 // PackFile パックファイルを表す
