@@ -66,7 +66,7 @@ func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
 func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
 	result := map[string]bool{}
 	for k, c := range b.Contents {
-		url, err := d.createDataUrl(c.Hash)
+		url, err := d.dataUrl(c.Hash)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		}
 	} else {
 
-		fetchUrl, err := d.createDataUrl(hash)
+		fetchUrl, err := d.dataUrl(hash)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +203,7 @@ func (d *Downloader) FetchTag(tag string) ([]byte, error) {
 	return data, nil
 }
 
-func (d *Downloader) createDataUrl(hash string) (*url.URL, error) {
+func (d *Downloader) dataUrl(hash string) (*url.URL, error) {
 	return d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
 }
 

@@ -354,7 +354,7 @@ var lsCommand = cli.Command{
 	ArgsUsage: "location",
 	Flags: []cli.Flag{
 		cli.BoolFlag{
-			Name:  "exist, e",
+			Name:  "verify",
 			Usage: "Check for files on the server.",
 		},
 	},
@@ -369,7 +369,7 @@ func doLs(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	isExist := c.Bool("exist")
+	verify := c.Bool("verify")
 
 	location := args[0]
 
@@ -386,7 +386,7 @@ func doLs(c *cli.Context) {
 	}
 	sort.Strings(keys)
 
-	if isExist {
+	if verify {
 		fileStatusList, err := downloader.ExistsAll(bucket)
 		check(err)
 
