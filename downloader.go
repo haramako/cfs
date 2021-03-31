@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/natefinch/atomic"
 	"golang.org/x/sync/errgroup"
@@ -65,17 +66,45 @@ func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
 
 func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
 	result := map[string]bool{}
-	for k, c := range b.Contents {
-		url, err := d.dataUrl(c.Hash)
-		if err != nil {
-			return nil, err
-		}
-		res, err := getRequest(url)
-		if err != nil {
-			return nil, err
-		}
-		result[k] = res.StatusCode == 200
+	mutex := sync.Mutex{}
+
+	transport := &http.Transport{}
+	wg := sync.WaitGroup{}
+	ch := make(chan Content, 32)
+
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for c := range ch {
+				if Verbose {
+					fmt.Printf("verifying %s (%s)\n", c.Path, c.Hash)
+				}
+				url, err := d.dataUrl(c.Hash)
+				if err != nil {
+					panic(err)
+				}
+				res, err := headRequest(transport, url)
+				if err != nil {
+					mutex.Lock()
+					result[c.Path] = false
+					mutex.Unlock()
+					continue
+				}
+				mutex.Lock()
+				result[c.Path] = (res.StatusCode == 200)
+				mutex.Unlock()
+			}
+		}()
 	}
+
+	for _, c := range b.Contents {
+		ch <- c
+	}
+
+	close(ch)
+	wg.Wait()
+
 	return result, nil
 }
 
@@ -222,6 +251,11 @@ func getRequest(_url *url.URL) (*http.Response, error) {
 	}
 	c := &http.Client{Transport: t}
 	return c.Get(_url.String())
+}
+
+func headRequest(t *http.Transport, _url *url.URL) (*http.Response, error) {
+	c := &http.Client{Transport: t}
+	return c.Head(_url.String())
 }
 
 func fetch(_url *url.URL) ([]byte, error) {
