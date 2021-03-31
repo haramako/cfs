@@ -104,9 +104,6 @@ func runCommand(cmdStr string, input string) (string, error) {
 		check(err)
 	}()
 
-	stdout, err := cmd.StdoutPipe()
-	check(err)
-
 	var outbuf bytes.Buffer
 	cmd.Stdout = &outbuf
 
