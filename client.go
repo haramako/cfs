@@ -47,7 +47,7 @@ func (c *Client) uploadWorker() {
 	for req := range c.queue {
 		err := c.Storage.Upload(req.Filename, req.Hash, req.Data, false)
 		if err != nil {
-			fmt.Println(err)
+			panic(err)
 		}
 	}
 }
@@ -226,13 +226,14 @@ func (c *Client) AddContent(relative string, content []byte) (bool, error) {
 }
 
 func (c *Client) Finish() error {
+
+	close(c.queue)
+	c.waitGroup.Wait()
+
 	err := c.UploadBucket()
 	if err != nil {
 		return err
 	}
-
-	close(c.queue)
-	c.waitGroup.Wait()
 
 	return nil
 }

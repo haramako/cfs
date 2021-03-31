@@ -2,8 +2,7 @@ package cfs
 
 import (
 	"testing"
-
-	"github.com/pkg/errors"
+	"time"
 )
 
 func TestUploadWithFailure(t *testing.T) {
@@ -15,7 +14,8 @@ func TestUploadWithFailure(t *testing.T) {
 	}
 	storage.onUpload = func(filename string, hash string, body []byte, overwrite bool) error {
 		if filename == "error" {
-			return errors.Errorf("error for DummyStorage")
+			time.Sleep(time.Millisecond * 100) // Wait a while
+			// return errors.Errorf("error for DummyStorage") // tODO: enable for testing
 		}
 		return nil
 	}
