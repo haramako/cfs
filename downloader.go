@@ -63,6 +63,22 @@ func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
 	return b, nil
 }
 
+func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
+	result := map[string]bool{}
+	for k, c := range b.Contents {
+		url, err := d.createDataUrl(c.Hash)
+		if err != nil {
+			return nil, err
+		}
+		res, err := getRequest(url)
+		if err != nil {
+			return nil, err
+		}
+		result[k] = res.StatusCode == 200
+	}
+	return result, nil
+}
+
 func (d *Downloader) Sync(b *Bucket, dir string) error {
 	for _, c := range b.Contents {
 		if Verbose {
@@ -153,7 +169,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		}
 	} else {
 
-		fetchUrl, err := d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
+		fetchUrl, err := d.createDataUrl(hash)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +203,11 @@ func (d *Downloader) FetchTag(tag string) ([]byte, error) {
 	return data, nil
 }
 
-func fetch(_url *url.URL) ([]byte, error) {
+func (d *Downloader) createDataUrl(hash string) (*url.URL, error) {
+	return d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
+}
+
+func getRequest(_url *url.URL) (*http.Response, error) {
 	t := &http.Transport{}
 	if isWindows() {
 		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("")))
@@ -195,8 +215,11 @@ func fetch(_url *url.URL) ([]byte, error) {
 		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
 	}
 	c := &http.Client{Transport: t}
+	return c.Get(_url.String())
+}
 
-	res, err := c.Get(_url.String())
+func fetch(_url *url.URL) ([]byte, error) {
+	res, err := getRequest(_url)
 	if err != nil {
 		return nil, err
 	}

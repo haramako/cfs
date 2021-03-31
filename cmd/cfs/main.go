@@ -352,6 +352,12 @@ var lsCommand = cli.Command{
 	Usage:     "list files in bucket",
 	Action:    doLs,
 	ArgsUsage: "location",
+	Flags: []cli.Flag{
+		cli.BoolFlag{
+			Name:  "exist, e",
+			Usage: "Check for files on the server.",
+		},
+	},
 }
 
 func doLs(c *cli.Context) {
@@ -362,6 +368,8 @@ func doLs(c *cli.Context) {
 		fmt.Println("need just 1 arguments")
 		os.Exit(1)
 	}
+
+	isExist := c.Bool("exist")
 
 	location := args[0]
 
@@ -378,11 +386,24 @@ func doLs(c *cli.Context) {
 	}
 	sort.Strings(keys)
 
-	for _, k := range keys {
-		file := bucket.Contents[k]
-		fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
-	}
+	if isExist {
+		fileStatusList, err := downloader.ExistsAll(bucket)
+		check(err)
 
+		for _, k := range keys {
+			file := bucket.Contents[k]
+			status := "ng"
+			if fileStatusList[k] {
+				status = "ok"
+			}
+			fmt.Printf("%s\t%s\n", file.Path, status)
+		}
+	} else {
+		for _, k := range keys {
+			file := bucket.Contents[k]
+			fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
+		}
+	}
 }
 
 var configCommand = cli.Command{
