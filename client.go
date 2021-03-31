@@ -191,6 +191,40 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 	return true, nil
 }
 
+func (c *Client) AddContent(relative string, content []byte) (bool, error) {
+	b := c.Bucket
+
+	key := filepath.ToSlash(relative)
+	if Option.Flatten {
+		key = filepath.Base(key)
+	}
+
+	origHash := b.Sum(content)
+
+	attr := b.GetAttribute(relative)
+	hash, size, err := c.Upload(relative, origHash, content, attr)
+	if err != nil {
+		return false, err
+	}
+
+	if Verbose {
+		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
+	}
+
+	b.Contents[key] = Content{
+		Path:     key,
+		Hash:     hash,
+		Size:     size,
+		Time:     time.Now(),
+		OrigHash: origHash,
+		OrigSize: len(content),
+		Attr:     attr,
+		Touched:  true,
+	}
+
+	return true, nil
+}
+
 func (c *Client) Finish() error {
 	err := c.UploadBucket()
 	if err != nil {
