@@ -114,9 +114,14 @@ func (d *Downloader) Sync(b *Bucket, dir string) error {
 			fmt.Printf("downloading %s\n", c.Path)
 		}
 
-		data, err := d.Fetch(c.Hash, c.Attr)
-		if err != nil {
-			return err
+		// TODO: 0 bytesのファイルはアップロードがされていないため、空ファイルを作る
+		var err error
+		data := []byte{}
+		if c.Size > 0 {
+			data, err = d.Fetch(c.Hash, c.Attr)
+			if err != nil {
+				return err
+			}
 		}
 
 		err = os.MkdirAll(filepath.Dir(filepath.Join(dir, filepath.FromSlash(c.Path))), 0777)
@@ -195,6 +200,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 
 	var data []byte
 
+	// データをキャッシュしているパス取得
 	cache := filepath.Join(GlobalDataCacheDir(), hash)
 	_, err := os.Stat(cache)
 	if !os.IsNotExist(err) {
@@ -204,16 +210,19 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		}
 	} else {
 
+		// ダウンロードURL取得
 		fetchUrl, err := d.dataUrl(hash)
 		if err != nil {
 			return nil, err
 		}
 
+		// ファイルダウンロード
 		data, err = fetch(fetchUrl)
 		if err != nil {
 			return nil, err
 		}
 
+		// データファイルをキャッシュする
 		err = atomic.WriteFile(cache, bytes.NewBuffer(data))
 		if err != nil {
 			return nil, err
