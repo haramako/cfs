@@ -1,15 +1,17 @@
+revision=$(shell git rev-parse --short HEAD)
+
 all: darwin linux windows
 
 .PHONY: all darwin linux windows test test-file test-gcs
 
 darwin:
-	cd cmd/cfs; GOOS=darwin GOARCH=amd64 go build -o ../../bin/darwin/cfs
+	cd cmd/cfs; GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.revision=$(revision)" -o ../../bin/darwin/cfs
 
 linux:
-	cd cmd/cfs; GOOS=linux GOARCH=amd64 go build -o ../../bin/linux/cfs
+	cd cmd/cfs; GOOS=linux GOARCH=amd64 go build -ldflags "-X main.revision=$(revision)" -o ../../bin/linux/cfs
 
 windows:
-	cd cmd/cfs; GOOS=windows GOARCH=amd64 go build -o ../../bin/windows/cfs.exe
+	cd cmd/cfs; GOOS=windows GOARCH=amd64 go build -ldflags "-X main.revision=$(revision)" -o ../../bin/windows/cfs.exe
 
 test: test-file test-s3 test-gcs
 
