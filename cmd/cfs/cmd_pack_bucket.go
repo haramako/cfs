@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/haramako/cfs/internal/cfs"
 	"github.com/haramako/cfs/internal/pack"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var packBucketCommand = cli.Command{
+var packBucketCommand = &cli.Command{
 	Name:      "pack-bucket",
 	Usage:     "pack specified bucket",
 	Action:    doPackBucket,
@@ -37,10 +38,10 @@ func packFromBucket(b *cfs.Bucket, d *cfs.Downloader) (*pack.PackFile, error) {
 	return pack.NewPackFile(entries), nil
 }
 
-func doPackBucket(c *cli.Context) {
+func doPackBucket(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) != 2 {
 		fmt.Println("need just 2 arguments")
 		os.Exit(1)
@@ -55,7 +56,7 @@ func doPackBucket(c *cli.Context) {
 	bucket, err := downloader.LoadBucket(location)
 	check(err)
 
-	filter := c.GlobalString("filter-cmd")
+	filter := c.String("filter-cmd")
 
 	if filter != "" {
 		bucket, err = filterBucket(filter, bucket)
@@ -71,4 +72,5 @@ func doPackBucket(c *cli.Context) {
 
 	err = pack.Pack(w, pak, nil)
 	check(err)
+	return nil
 }

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-yaml/yaml"
+	"go.yaml.in/yaml/v3"
 )
 
 type SettingInfo struct {

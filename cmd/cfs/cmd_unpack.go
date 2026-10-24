@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -8,29 +9,30 @@ import (
 
 	"github.com/haramako/cfs/internal/cfs"
 	"github.com/haramako/cfs/internal/pack"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var unpackCommand = cli.Command{
+var unpackCommand = &cli.Command{
 	Name:      "unpack",
 	Usage:     "unpack specified pack file",
 	Action:    doUnpack,
 	ArgsUsage: "packfile.cfspack -o output-dir",
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "output, o",
-			Value: "",
-			Usage: "output dir",
+		&cli.StringFlag{
+			Name:    "output",
+			Aliases: []string{"o"},
+			Value:   "",
+			Usage:   "output dir",
 		},
 	},
 }
 
-func doUnpack(c *cli.Context) {
+func doUnpack(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	filter := c.GlobalString("filter-cmd")
+	filter := c.String("filter-cmd")
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 
 	if len(args) != 1 {
 		fmt.Println("need just 1 arguments")
@@ -49,7 +51,7 @@ func doUnpack(c *cli.Context) {
 	pak, err = filterPackFile(filter, pak)
 	check(err)
 
-	if c.String("o") != "" {
+	if c.String("output") != "" {
 		maxSize := 0
 		for _, e := range pak.Entries {
 			if e.Size > maxSize {
@@ -63,7 +65,7 @@ func doUnpack(c *cli.Context) {
 				fmt.Printf("%s\n", e.Path)
 			}
 
-			outdir := c.String("o")
+			outdir := c.String("output")
 
 			outPath := filepath.Join(outdir, e.Path)
 			err := os.MkdirAll(filepath.Dir(outPath), 0777)
@@ -84,4 +86,5 @@ func doUnpack(c *cli.Context) {
 		}
 	}
 
+	return nil
 }

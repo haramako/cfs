@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"mime"
 	"net"
@@ -11,18 +12,19 @@ import (
 	"strings"
 
 	"github.com/haramako/cfs/internal/cfs"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var httpCommand = cli.Command{
+var httpCommand = &cli.Command{
 	Name:   "http",
 	Usage:  "HTTP Server",
 	Action: doHTTP,
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "port, p",
-			Value: "",
-			Usage: "using port number",
+		&cli.StringFlag{
+			Name:    "port",
+			Aliases: []string{"p"},
+			Value:   "",
+			Usage:   "using port number",
 		},
 	},
 }
@@ -170,7 +172,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	panic(fmt.Errorf("file or directory %v not found", path))
 }
 
-func doHTTP(c *cli.Context) {
+func doHTTP(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
 	port := c.String("port")
@@ -184,4 +186,5 @@ func doHTTP(c *cli.Context) {
 	addr := fmt.Sprintf("localhost:%s", port)
 	fmt.Printf("start server: %s\n", addr)
 	http.ListenAndServe(addr, nil)
+	return nil
 }

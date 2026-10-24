@@ -1,24 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/haramako/cfs/internal/pack"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var patchCommand = cli.Command{
+var patchCommand = &cli.Command{
 	Name:      "patch",
 	Usage:     "make patch package",
 	Action:    doPatch,
 	ArgsUsage: "base.tp current.tp output.tp",
 }
 
-func doPatch(c *cli.Context) {
+func doPatch(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) != 3 {
 		fmt.Println("need just 3 arguments")
 		os.Exit(1)
@@ -54,4 +55,5 @@ func doPatch(c *cli.Context) {
 
 	err = pack.Pack(w, patch, nil)
 	check(err)
+	return nil
 }

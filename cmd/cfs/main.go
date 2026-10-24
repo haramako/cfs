@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"time"
 
 	"github.com/haramako/cfs/internal/cfs"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 var revision string
@@ -20,41 +21,45 @@ var revision string
 
 func main() {
 
-	app := cli.NewApp()
+	app := &cli.Command{}
 	app.Name = "cfs"
-	app.HelpName = "cfs"
 	app.Usage = "cfs client"
 	app.Version = "0.0.0 " + revision
 	app.Flags = []cli.Flag{
-		cli.BoolFlag{
-			Name:  "verbose, V",
-			Usage: "verbose",
+		&cli.BoolFlag{
+			Name:    "verbose",
+			Aliases: []string{"V"},
+			Usage:   "verbose",
 		},
-		cli.StringFlag{
-			Name:  "config, C",
-			Value: ".cfsenv",
-			Usage: "config file",
+		&cli.StringFlag{
+			Name:    "config",
+			Aliases: []string{"C"},
+			Value:   ".cfsenv",
+			Usage:   "config file",
 		},
-		cli.StringFlag{
-			Name:  "setting, S",
-			Value: ".cfs_setting",
-			Usage: "setting file",
+		&cli.StringFlag{
+			Name:    "setting",
+			Aliases: []string{"S"},
+			Value:   ".cfs_setting",
+			Usage:   "setting file",
 		},
-		cli.StringFlag{
-			Name:  "cabinet, c",
-			Value: "",
-			Usage: "cabinet URL",
+		&cli.StringFlag{
+			Name:    "cabinet",
+			Aliases: []string{"c"},
+			Value:   "",
+			Usage:   "cabinet URL",
 		},
-		cli.BoolFlag{
-			Name:  "force, f",
-			Usage: "force upload(use no cache)",
+		&cli.BoolFlag{
+			Name:    "force",
+			Aliases: []string{"f"},
+			Usage:   "force upload(use no cache)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "filter-cmd",
 			Usage: "command for filter files",
 		},
 	}
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		uploadCommand,
 		syncCommand,
 		mergeCommand,
@@ -69,7 +74,7 @@ func main() {
 		patchCommand,
 	}
 
-	err := app.Run(os.Args)
+	err := app.Run(context.Background(), os.Args)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -83,21 +88,21 @@ func check(err error) {
 	}
 }
 
-func loadConfig(c *cli.Context) {
+func loadConfig(c *cli.Command) {
 	cfs.InitDefaultSetting()
 
-	cfs.Verbose = c.GlobalBool("V")
-	cfs.LoadDefaultOptions(c.GlobalString("config"))
+	cfs.Verbose = c.Bool("verbose")
+	cfs.LoadDefaultOptions(c.String("config"))
 
-	if c.GlobalString("cabinet") != "" {
-		cfs.Option.Cabinet = c.GlobalString("cabinet")
+	if c.String("cabinet") != "" {
+		cfs.Option.Cabinet = c.String("cabinet")
 	}
 
-	if c.GlobalString("url") != "" {
-		cfs.Option.Url = c.GlobalString("url")
+	if c.String("url") != "" {
+		cfs.Option.Url = c.String("url")
 	}
 
-	if c.GlobalBool("force") {
+	if c.Bool("force") {
 		cfs.Option.NoCache = true
 	}
 }
@@ -115,25 +120,28 @@ func getDownloaderURL() string {
 	return storage.DownloaderUrl().String()
 }
 
-var uploadCommand = cli.Command{
+var uploadCommand = &cli.Command{
 	Name:   "upload",
 	Usage:  "upload files to cabinet",
 	Action: doUpload,
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "tag, t",
-			Value: "",
-			Usage: "tag name",
+		&cli.StringFlag{
+			Name:    "tag",
+			Aliases: []string{"t"},
+			Value:   "",
+			Usage:   "tag name",
 		},
-		cli.StringFlag{
-			Name:  "bucket, b",
-			Value: "", // 指定されない場合は、自動で設定される
-			Usage: "bucket file name",
+		&cli.StringFlag{
+			Name:    "bucket",
+			Aliases: []string{"b"},
+			Value:   "", // 指定されない場合は、自動で設定される
+			Usage:   "bucket file name",
 		},
-		cli.StringFlag{
-			Name:  "output, o",
-			Value: "",
-			Usage: "hash output file",
+		&cli.StringFlag{
+			Name:    "output",
+			Aliases: []string{"o"},
+			Value:   "",
+			Usage:   "hash output file",
 		},
 	},
 }
@@ -156,10 +164,10 @@ func escapeFilename(s string) string {
 	return string(r)
 }
 
-func doUpload(c *cli.Context) {
+func doUpload(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	args := c.Args()
+	args := c.Args().Slice()
 	if len(args) == 0 {
 		args = []string{"."}
 	}
@@ -215,19 +223,20 @@ func doUpload(c *cli.Context) {
 	if output != "" {
 		check(os.WriteFile(output, []byte(bucket.Hash), 0777))
 	}
+	return nil
 }
 
-var syncCommand = cli.Command{
+var syncCommand = &cli.Command{
 	Name:      "sync",
 	Usage:     "sync from cabinet",
 	Action:    doSync,
 	ArgsUsage: "location output-dir",
 }
 
-func doSync(c *cli.Context) {
+func doSync(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) != 2 {
 		fmt.Println("need just 2 arguments")
 		os.Exit(1)
@@ -242,7 +251,7 @@ func doSync(c *cli.Context) {
 	bucket, err := downloader.LoadBucket(location)
 	check(err)
 
-	filter := c.GlobalString("filter-cmd")
+	filter := c.String("filter-cmd")
 
 	if filter != "" {
 		bucket, err = filterBucket(filter, bucket)
@@ -250,26 +259,28 @@ func doSync(c *cli.Context) {
 	}
 
 	check(downloader.Sync(bucket, dir))
+	return nil
 }
 
-var mergeCommand = cli.Command{
+var mergeCommand = &cli.Command{
 	Name:      "merge",
 	Usage:     "merge buckets",
 	Action:    doMerge,
 	ArgsUsage: "output-tag location [...]",
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "output, o",
-			Value: "",
-			Usage: "hash output file",
+		&cli.StringFlag{
+			Name:    "output",
+			Aliases: []string{"o"},
+			Value:   "",
+			Usage:   "hash output file",
 		},
 	},
 }
 
-func doMerge(c *cli.Context) {
+func doMerge(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) < 2 {
 		fmt.Println("need at least 2 arguments")
 		os.Exit(1)
@@ -298,7 +309,7 @@ func doMerge(c *cli.Context) {
 		merged.Merge(bucket)
 	}
 
-	filter := c.GlobalString("filter-cmd")
+	filter := c.String("filter-cmd")
 
 	if filter != "" {
 		merged, err = filterBucket(filter, merged)
@@ -325,19 +336,20 @@ func doMerge(c *cli.Context) {
 	if output != "" {
 		check(os.WriteFile(output, []byte(merged.Hash), 0777))
 	}
+	return nil
 }
 
-var catCommand = cli.Command{
+var catCommand = &cli.Command{
 	Name:      "cat",
 	Usage:     "fetch a data from url (for debug)",
 	Action:    doCat,
 	ArgsUsage: "location filename",
 }
 
-func doCat(c *cli.Context) {
+func doCat(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) < 2 {
 		fmt.Println("need 2 arguments")
 		os.Exit(1)
@@ -362,25 +374,26 @@ func doCat(c *cli.Context) {
 	check(err)
 
 	fmt.Print(string(data))
+	return nil
 }
 
-var lsCommand = cli.Command{
+var lsCommand = &cli.Command{
 	Name:      "ls",
 	Usage:     "list files in bucket",
 	Action:    doLs,
 	ArgsUsage: "location",
 	Flags: []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "verify",
 			Usage: "Check for files on the server.",
 		},
 	},
 }
 
-func doLs(c *cli.Context) {
+func doLs(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) != 1 {
 		fmt.Println("need just 1 arguments")
 		os.Exit(1)
@@ -421,29 +434,32 @@ func doLs(c *cli.Context) {
 			fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
 		}
 	}
+	return nil
 }
 
-var configCommand = cli.Command{
+var configCommand = &cli.Command{
 	Name:   "config",
 	Usage:  "show current config",
 	Action: doConfig,
 }
 
-func doConfig(c *cli.Context) {
+func doConfig(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
 	fmt.Printf("Cabinet       : %s\n", cfs.Option.Cabinet)
 	fmt.Printf("Downloader URL: %s\n", getDownloaderURL())
+	return nil
 }
 
-var settingCommand = cli.Command{
+var settingCommand = &cli.Command{
 	Name:   "setting",
 	Usage:  "show current setting",
 	Action: doSetting,
 }
 
-func doSetting(c *cli.Context) {
+func doSetting(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
 	fmt.Printf("HomeRoot       : %s\n", cfs.Setting.HomeRoot)
+	return nil
 }

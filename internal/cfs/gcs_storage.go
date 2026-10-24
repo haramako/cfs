@@ -1,20 +1,17 @@
 package cfs
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"net/url"
 
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
+	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
-	"google.golang.org/api/storage/v1"
 )
 
 type GcsStorage struct {
 	BucketName string
-	service    *storage.Service
+	bucket     *storage.BucketHandle
 	cabinetUrl *url.URL
 }
 
@@ -23,17 +20,12 @@ func NewGcsStorage(bucketName string) (*GcsStorage, error) {
 		BucketName: bucketName,
 	}
 
-	client, err := google.DefaultClient(context.Background(), storage.DevstorageFullControlScope)
+	client, err := storage.NewClient(context.Background())
 	if err != nil {
-		return nil, errors.Wrap(err, "Unable to get default gs client")
+		return nil, fmt.Errorf("Unable to get default gs client: %w", err)
 	}
 
-	service, err := storage.New(client)
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to create storage service")
-	}
-
-	s.service = service
+	s.bucket = client.Bucket(bucketName)
 
 	s.cabinetUrl, err = url.Parse("http://storage.googleapis.com/" + s.BucketName + "/")
 	if err != nil {
@@ -49,9 +41,10 @@ func (s *GcsStorage) DownloaderUrl() *url.URL {
 
 func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {
 	path := "data/" + hashPath(hash)
-	object := &storage.Object{Name: path}
+	ctx := context.Background()
+	obj := s.bucket.Object(path)
 
-	_, err := s.service.Objects.Get(s.BucketName, path).Do()
+	_, err := obj.Attrs(ctx)
 	if err == nil {
 		// file already exists.
 		return nil
@@ -59,7 +52,10 @@ func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite
 
 	// no file! lets make a file
 
-	_, err = s.service.Objects.Insert(s.BucketName, object).IfGenerationMatch(0).Media(bytes.NewBuffer(body)).Do()
+	w := obj.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
+	w.Write(body)
+	err = w.Close()
+	// 従来の挙動を維持: 304 Not Modified 以外のエラーは無視している
 	if err != nil && googleapi.IsNotModified(err) {
 		fmt.Println(err)
 		return err
@@ -72,9 +68,10 @@ func (s *GcsStorage) Upload(filename string, hash string, body []byte, overwrite
 
 func (s *GcsStorage) UploadTag(filename string, body []byte) error {
 	path := "tag/" + filename
-	object := &storage.Object{Name: path}
 
-	_, err := s.service.Objects.Insert(s.BucketName, object).Media(bytes.NewBuffer(body)).Do()
+	w := s.bucket.Object(path).NewWriter(context.Background())
+	w.Write(body)
+	err := w.Close()
 	if err != nil {
 		fmt.Println(err)
 		return err

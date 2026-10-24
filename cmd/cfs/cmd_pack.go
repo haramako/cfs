@@ -1,30 +1,31 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/haramako/cfs/internal/pack"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var packCommand = cli.Command{
+var packCommand = &cli.Command{
 	Name:      "pack",
 	Usage:     "pack specified dir",
 	Action:    doPack,
 	ArgsUsage: "packfile.cfspack dir [...]",
 }
 
-func doPack(c *cli.Context) {
+func doPack(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
-	var args = c.Args()
+	var args = c.Args().Slice()
 	if len(args) != 2 {
 		fmt.Println("need just 2 arguments")
 		os.Exit(1)
 	}
 
-	filter := c.GlobalString("filter-cmd")
+	filter := c.String("filter-cmd")
 
 	packfile := args[0]
 
@@ -44,4 +45,5 @@ func doPack(c *cli.Context) {
 
 	err = pack.Pack(w, pak, nil)
 	check(err)
+	return nil
 }
