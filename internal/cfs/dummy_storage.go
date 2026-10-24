@@ -3,11 +3,13 @@ package cfs
 import (
 	"fmt"
 	"net/url"
+	"sync"
 )
 
 type DummyStorage struct {
 	CabinetPath string
 	rootUrl     *url.URL
+	mutex       sync.Mutex // Upload は複数のワーカーから並列に呼ばれる
 	contents    map[string][]byte
 	tags        map[string][]byte
 
@@ -40,7 +42,9 @@ func (s *DummyStorage) Upload(filename string, hash string, body []byte, overwri
 		}
 	}
 
+	s.mutex.Lock()
 	s.contents[hash] = body
+	s.mutex.Unlock()
 
 	if Verbose {
 		fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
@@ -50,7 +54,9 @@ func (s *DummyStorage) Upload(filename string, hash string, body []byte, overwri
 }
 
 func (s *DummyStorage) UploadTag(filename string, body []byte) error {
+	s.mutex.Lock()
 	s.tags[filename] = body
+	s.mutex.Unlock()
 
 	if Verbose {
 		fmt.Printf("uploading tag '%s'\n", filename)
