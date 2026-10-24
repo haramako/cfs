@@ -3,7 +3,7 @@ package cfs
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 )
 
 type OptionInfo struct {
@@ -38,7 +38,7 @@ func LoadDefaultOptions(configFile string) {
 	if configFile == "" {
 		configFile = ".cfsenv"
 	}
-	data, err := ioutil.ReadFile(configFile)
+	data, err := os.ReadFile(configFile)
 	if err == nil {
 		err = Option.Parse(data)
 		if err != nil {

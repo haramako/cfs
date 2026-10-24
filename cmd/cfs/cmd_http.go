@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/haramako/cfs/internal/cfs"
 	"github.com/urfave/cli"
-	"local.package/cfs"
 )
 
 var httpCommand = cli.Command{

@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +153,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		}
 	}
 
-	origData, err := ioutil.ReadFile(fullPath)
+	origData, err := os.ReadFile(fullPath)
 	if err != nil {
 		return false, err
 	}
@@ -257,12 +256,12 @@ func (c *Client) UploadBucket() error {
 
 	// バケットの保存先が設定されているなら保存する
 	if b.Path != "" {
-		err = ioutil.WriteFile(filepath.FromSlash(b.Path), origData, 0666)
+		err = os.WriteFile(filepath.FromSlash(b.Path), origData, 0666)
 		if err != nil {
 			return err
 		}
 
-		ioutil.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
+		os.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
 		if Verbose {
 			fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
 		}

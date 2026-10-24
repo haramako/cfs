@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -28,7 +27,7 @@ func TestMain(m *testing.M) {
 
 func setupBucket() (*Client, *Bucket, string) {
 
-	dir, err := ioutil.TempDir("", "cfs-test")
+	dir, err := os.MkdirTemp("", "cfs-test")
 	dir = filepath.FromSlash(dir)
 	if err != nil {
 		panic(err)
@@ -60,7 +59,7 @@ func newStorage(bucket *Bucket) Storage {
 	case "cfs":
 		uri = "cfs://localhost:9999/"
 	default:
-		tempDir, err := ioutil.TempDir("", "cfs-file")
+		tempDir, err := os.MkdirTemp("", "cfs-file")
 		if err != nil {
 			panic(err)
 		}
@@ -118,7 +117,7 @@ func addFile(dir, file, content string) {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile(fullpath, []byte(content), 0666)
+	err = os.WriteFile(fullpath, []byte(content), 0666)
 	if err != nil {
 		panic(err)
 	}
@@ -207,7 +206,7 @@ func TestCompress(t *testing.T) {
 		return // なにもしない
 	}
 
-	temp, err := ioutil.TempDir("", "cfs-sync")
+	temp, err := os.MkdirTemp("", "cfs-sync")
 	if err != nil {
 		panic(err)
 	}

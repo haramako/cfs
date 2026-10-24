@@ -4,15 +4,14 @@ package main
 import (
 	"crypto/md5"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/haramako/cfs/internal/cfs"
 	"github.com/urfave/cli"
-	"local.package/cfs"
 )
 
 var revision string
@@ -214,7 +213,7 @@ func doUpload(c *cli.Context) {
 	check(client.Finish())
 
 	if output != "" {
-		check(ioutil.WriteFile(output, []byte(bucket.Hash), 0777))
+		check(os.WriteFile(output, []byte(bucket.Hash), 0777))
 	}
 }
 
@@ -324,7 +323,7 @@ func doMerge(c *cli.Context) {
 	check(client.UploadBucket())
 
 	if output != "" {
-		check(ioutil.WriteFile(output, []byte(merged.Hash), 0777))
+		check(os.WriteFile(output, []byte(merged.Hash), 0777))
 	}
 }
 

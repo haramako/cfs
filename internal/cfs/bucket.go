@@ -3,7 +3,7 @@ package cfs
 import (
 	"crypto/md5"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -86,7 +86,7 @@ func BucketFromFile(path string) (*Bucket, error) {
 		Contents: make(map[string]Content),
 		HashType: "md5",
 	}
-	data, err := ioutil.ReadFile(filepath.FromSlash(path))
+	data, err := os.ReadFile(filepath.FromSlash(path))
 	if err == nil {
 		if Verbose {
 			fmt.Printf("read bucket from '%s'\n", b.Path)

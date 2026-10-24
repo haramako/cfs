@@ -1,28 +1,29 @@
 revision=$(shell git rev-parse --short HEAD)
+LDFLAGS=-ldflags "-X main.revision=$(revision)"
 
 all: darwin linux windows
 
-.PHONY: all darwin linux windows test test-file test-gcs
+.PHONY: all darwin linux windows test test-file test-gcs test-s3 vet
 
 darwin:
-	cd cmd/cfs; GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.revision=$(revision)" -o ../../bin/darwin/cfs
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bin/darwin/cfs ./cmd/cfs
 
 linux:
-	cd cmd/cfs; GOOS=linux GOARCH=amd64 go build -ldflags "-X main.revision=$(revision)" -o ../../bin/linux/cfs
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/linux/cfs ./cmd/cfs
 
 windows:
-	cd cmd/cfs; GOOS=windows GOARCH=amd64 go build -ldflags "-X main.revision=$(revision)" -o ../../bin/windows/cfs.exe
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bin/windows/cfs.exe ./cmd/cfs
 
 test: test-file test-s3 test-gcs
 
 test-file:
-	go test
-	
-test-cfs:
-	CFS_TEST_STORAGE=cfs go test
+	go test ./...
 
 test-gcs:
-	CFS_TEST_STORAGE=gcs go test
+	CFS_TEST_STORAGE=gcs go test ./internal/cfs
 
 test-s3:
-	CFS_TEST_STORAGE=s3 go test
+	CFS_TEST_STORAGE=s3 go test ./internal/cfs
+
+vet:
+	go vet ./...

@@ -3,13 +3,12 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
+	"github.com/haramako/cfs/internal/cfs"
+	"github.com/haramako/cfs/internal/pack"
 	"github.com/urfave/cli"
-	"local.package/cfs"
-	"local.package/cfs/pack"
 )
 
 var unpackCommand = cli.Command{
@@ -76,7 +75,7 @@ func doUnpack(c *cli.Context) {
 			_, err = io.ReadFull(f, buf[:e.Size])
 			check(err)
 
-			err = ioutil.WriteFile(outPath, buf[:e.Size], 0777)
+			err = os.WriteFile(outPath, buf[:e.Size], 0777)
 			check(err)
 		}
 	} else {

@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -63,7 +62,7 @@ func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrit
 		return nil
 	}
 
-	err = ioutil.WriteFile(file, body, 0777)
+	err = os.WriteFile(file, body, 0777)
 	if err != nil {
 		return err
 	}
@@ -91,7 +90,7 @@ func (s *FileStorage) UploadTag(filename string, body []byte) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(file, body, 0777)
+	err = os.WriteFile(file, body, 0777)
 	if err != nil {
 		return err
 	}

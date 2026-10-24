@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -204,7 +204,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 	cache := filepath.Join(GlobalDataCacheDir(), hash)
 	_, err := os.Stat(cache)
 	if !os.IsNotExist(err) {
-		data, err = ioutil.ReadFile(cache)
+		data, err = os.ReadFile(cache)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +279,7 @@ func fetch(_url *url.URL) ([]byte, error) {
 
 	defer res.Body.Close()
 
-	contents, err := ioutil.ReadAll(res.Body)
+	contents, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}

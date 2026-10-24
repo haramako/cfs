@@ -7,13 +7,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 
+	"github.com/haramako/cfs/internal/cfs"
 	"golang.org/x/text/unicode/norm"
-	"local.package/cfs"
 )
 
 // PackFile パックファイルを表す
@@ -150,7 +149,7 @@ func NewPackFileFromDir(dir string) (*PackFile, error) {
 		if !info.IsDir() {
 			entryPath := filepath.ToSlash(path[len(dir)+1:])
 
-			data, err := ioutil.ReadFile(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}
