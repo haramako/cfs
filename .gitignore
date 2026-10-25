@@ -17,3 +17,6 @@ gin-bin
 
 # 本物の S3 を使うテストの設定（バケット名などをリポジトリに含めない）
 /.cfs-test.env
+
+# Claude Code の個人用設定（cfs のセッションで既定の AWS プロファイルをテスト用ロールにする）
+/.claude/settings.local.json

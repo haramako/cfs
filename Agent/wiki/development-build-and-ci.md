@@ -31,6 +31,7 @@ CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 - テスト用バケットは `cfs cabinet init` で作成（保持期間 7 日）。元の `s3://cfs-autotest` は他人のバケットだったので使えない
 - ふだんの認証情報で間違って消さないよう、**テスト用バケットだけを操作できる IAM ロール `cfs-autotest`**（インラインポリシーは `cfs cabinet policy gc` の出力。信頼はオーナーの IAM ユーザーだけ）と、同名のプロファイル `cfs-autotest`（`source_profile = default`）を作った。ほかのバケットへの削除や `ListAllMyBuckets` が拒否されることは実際のリクエストで確認済み
 - **aws-sdk-go-v2（config v1.33.10）は、`login_session` のプロファイルを `source_profile` にできない**（`SharedConfig.hasCredentials` が `LoginSession` を見ていないため、`failed to load assume role ..., of profile default` になる）。そのため `scripts/with-test-aws.sh` が `aws configure export-credentials` でロールの一時的な認証情報を取り出し、環境変数として渡している。SDK が直ったら、`AWS_PROFILE` だけで動くはず
+- エージェントのセッションでは、`.claude/settings.local.json`（`.gitignore` 済み）の `env` で `AWS_PROFILE=cfs-autotest` を既定にしている。何も付けずに `aws ...` を実行してもテスト用ロールで動く（ふだんの権限が要る操作だけ `--profile default` を明示し、先にオーナーに伝える）。`cfs` 本体は SDK の制約で認証に失敗するので、`scripts/with-test-aws.sh` 経由で動かす
 - 確認用の CLI 実行などで、テストと別の暗号鍵で上げると、GC がその（保持期間内の）マニフェストを読めずに中止する。両方の鍵を `CFS_ENCRYPT_KEY` / `CFS_OLD_ENCRYPT_KEYS` で渡すと通る
 
 - `manifest_test.go` が主要な結合テスト（新規アップロード、上書き、圧縮、無圧縮拡張子、タグ）。`TestMain` で暗号鍵/IV を固定値に設定している
