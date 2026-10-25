@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/haramako/cfs/internal/cfs"
 	"github.com/haramako/cfs/internal/pack"
@@ -17,16 +15,18 @@ var packManifestCommand = &cli.Command{
 	ArgsUsage: "location packfile.cfspack",
 }
 
-func packFromManifest(b *cfs.Manifest, d *cfs.Downloader) (*pack.PackFile, error) {
-
-	err := d.FetchAll(b)
-	check(err)
-
-	entries := make([]pack.Entry, 0, len(b.Contents))
-	for _, c := range b.Contents {
+// packFromManifest は、マニフェストのファイルを全部取得して、パックにする
+func packFromManifest(m *cfs.Manifest, d *cfs.Downloader) (*pack.PackFile, error) {
+	// 先に並列で手元のキャッシュに取得しておく
+	if err := d.FetchAll(m); err != nil {
+		return nil, err
+	}
+	entries := make([]pack.Entry, 0, len(m.Contents))
+	for _, c := range m.Contents {
 		data, err := d.Fetch(c.Hash, c.Attr)
-		check(err)
-
+		if err != nil {
+			return nil, err
+		}
 		entries = append(entries, pack.Entry{
 			Path: c.Path,
 			Hash: c.OrigHash,
@@ -34,43 +34,30 @@ func packFromManifest(b *cfs.Manifest, d *cfs.Downloader) (*pack.PackFile, error
 			Data: data,
 		})
 	}
-
 	return pack.NewPackFile(entries), nil
 }
 
 func doPackManifest(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	var args = c.Args().Slice()
-	if len(args) != 2 {
-		fmt.Println("need just 2 arguments")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	args, err := needArgs(c, 2, 2)
+	if err != nil {
+		return err
 	}
 
-	location := args[0]
-	packfile := args[1]
-
-	downloader, err := cfs.NewDownloader(getDownloaderURL())
-	check(err)
-
-	manifest, err := downloader.LoadManifest(location)
-	check(err)
-
-	filter := c.String("filter-cmd")
-
-	if filter != "" {
-		manifest, err = filterManifest(filter, manifest)
-		check(err)
+	downloader, err := openDownloader(cfg)
+	if err != nil {
+		return err
 	}
-
+	manifest, err := loadManifest(c, downloader, args[0])
+	if err != nil {
+		return err
+	}
 	pak, err := packFromManifest(manifest, downloader)
-	check(err)
-
-	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-	defer w.Close()
-	check(err)
-
-	err = pack.Pack(w, pak, nil)
-	check(err)
-	return nil
+	if err != nil {
+		return err
+	}
+	return writePackFile(args[1], pak)
 }

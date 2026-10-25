@@ -22,8 +22,12 @@ type Fetcher interface {
 	Exists(path string) (bool, error)
 }
 
-// NewFetcher は、場所の指定（URL か手元のパス）から Fetcher を作る
-func NewFetcher(location string) (Fetcher, error) {
+// OpenFetcher は、場所の指定（URL か手元のパス）から Fetcher を作る。cfg が nil なら既定の設定を使う
+func OpenFetcher(location string, cfg *Config) (Fetcher, error) {
+	cfg = cfg.orDefault()
+	if location == "" {
+		return nil, errNoCabinet
+	}
 	if !IsURL(location) {
 		abs, err := filepath.Abs(location)
 		if err != nil {
@@ -51,7 +55,7 @@ func NewFetcher(location string) (Fetcher, error) {
 		return &fileFetcher{root: root}, nil
 	case "s3":
 		// HTTP で公開しなくても、S3 から直接読む
-		return NewS3Storage(u.Host)
+		return NewS3Storage(u.Host, cfg.S3Region, cfg.Logger())
 	default:
 		return nil, fmt.Errorf("unsupported download location %v", location)
 	}

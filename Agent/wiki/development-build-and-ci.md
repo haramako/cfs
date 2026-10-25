@@ -42,10 +42,10 @@ CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 - `gc_test.go` は GC（タグと保持期間内を残す、2 回連続ルール、「マニフェストが先・中身は後」、共有データ、dry-run、読めないマニフェストでの中止、キャビネット設定、タグの一覧・削除）。各テストを `DummyStorage`（`now` で時刻を進める）と `FileStorage`（`timedFileStorage` が置いたファイルの更新日時をテストの時刻にする）の両方で回す
 - `location_test.go` / `fetcher_test.go` はパスと URL の判定、Windows のパス、`.cfsenv` 基準の相対パス、環境変数、取得口
 - `internal/pack/pack_test.go` はパック/パースの往復、フォルダからのパック（`.` や末尾の区切り）、パッチ
-- `cmd/cfs/cli_test.go` は CLI の結合テスト。`newApp()` をプロセス内で実行し、`os.Stdout` をパイプで差し替えて出力を見る（`check` の panic は recover して失敗にする）。`t.Chdir` で一時フォルダを今のフォルダにするので並列にはしない。`--filter-cmd` は、テストのバイナリ自身を `CFS_TEST_FILTER` 付きで呼んでフィルターにする（`TestMain`）。エラー時に `os.Exit` する経路は試せない
+- `cmd/cfs/cli_test.go` は CLI の結合テスト。`newApp()` をプロセス内で実行し、`os.Stdout` をパイプで差し替えて出力を見る（念のため panic も recover して失敗にする）。`t.Chdir` で一時フォルダを今のフォルダにするので並列にはしない。`--filter-cmd` は、テストのバイナリ自身を `CFS_TEST_FILTER` 付きで呼んでフィルターにする（`TestMain`）。エラーの経路は `TestCLIErrors`、終了コードは `TestMainExitCode`（テストのバイナリを `CFS_TEST_MAIN=1` で `main` として動かす）
 - `cmd/cfs/serve_test.go` は `cfs serve`
-- 2026-10-25 時点のカバレッジは全体で約 87%（`go test -coverpkg=./... -coverprofile=cover.out ./...`）。残りは `main` / `doServe` の起動部分と、`os.Exit` するエラー経路
-- `config_test.go` は実際のホームディレクトリに `~/.cfs/` を作る
+- 2026-10-25 時点のカバレッジは全体で約 87%（`go test -coverpkg=./... -coverprofile=cover.out ./...`）。残りは `doServe` の起動部分など
+- テストは手元のキャッシュを `Config.CacheDir`（CLI は `CFS_CACHE_DIR`）で一時フォルダにする。実際のキャッシュフォルダは使わない
 
 ### CLI の挙動比較（ゴールデンテスト）
 

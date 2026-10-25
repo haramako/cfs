@@ -166,14 +166,20 @@ func setupFakeS3(t *testing.T, region string) (*fakeS3, *S3Storage) {
 	t.Cleanup(server.Close)
 	fake.url = server.URL
 
-	s, err := newS3Storage("bkt", func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(server.URL)
+	return fake, openFakeS3(t, fake, "")
+}
+
+// openFakeS3 は、偽の S3 のバケットを、リージョンを指定して開く
+func openFakeS3(t *testing.T, fake *fakeS3, region string) *S3Storage {
+	t.Helper()
+	s, err := newS3Storage("bkt", region, nil, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(fake.url)
 		o.UsePathStyle = true
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fake, s
+	return s
 }
 
 func TestS3Put(t *testing.T) {
@@ -288,12 +294,10 @@ func TestS3RegionFromBucket(t *testing.T) {
 	}
 }
 
-func TestS3RegionFromOption(t *testing.T) {
-	saved := Option.S3Region
-	defer func() { Option.S3Region = saved }()
-	Option.S3Region = "eu-west-1"
-
-	fake, s := setupFakeS3(t, "us-west-2")
+func TestS3RegionFromConfig(t *testing.T) {
+	fake, _ := setupFakeS3(t, "us-west-2")
+	fake.headBuckets = 0
+	s := openFakeS3(t, fake, "eu-west-1")
 	if s.Region != "eu-west-1" {
 		t.Errorf("S3Region must take precedence but %q", s.Region)
 	}
@@ -317,7 +321,7 @@ func TestS3RegionFromEnv(t *testing.T) {
 	server := httptest.NewServer(fake)
 	defer server.Close()
 
-	s, err := newS3Storage("bkt", func(o *s3.Options) {
+	s, err := newS3Storage("bkt", "", nil, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(server.URL)
 		o.UsePathStyle = true
 	})
@@ -349,7 +353,7 @@ func TestS3RoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	d := &Downloader{fetcher: s}
+	d := openTestDownloader(t, s, nil)
 	loaded, err := d.LoadManifest("v1")
 	if err != nil {
 		t.Fatal(err)
@@ -369,11 +373,10 @@ func TestS3RoundTrip(t *testing.T) {
 func TestS3FetcherFromURL(t *testing.T) {
 	// s3:// の場所から Fetcher を作れること（実際の通信はしない）
 	isolateAWSEnv(t)
-	saved := Option.S3Region
-	defer func() { Option.S3Region = saved }()
-	Option.S3Region = "ap-northeast-1"
+	cfg := DefaultConfig()
+	cfg.S3Region = "ap-northeast-1"
 
-	f, err := NewFetcher("s3://bkt")
+	f, err := OpenFetcher("s3://bkt", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

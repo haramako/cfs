@@ -3,120 +3,122 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 
 	"github.com/haramako/cfs/internal/cfs"
 	"github.com/haramako/cfs/internal/pack"
 )
 
-func filterManifest(cmd string, b *cfs.Manifest) (*cfs.Manifest, error) {
+// --filter-cmd は、パスの一覧（1 行 1 パス）を標準入力で受け取り、残すパスを標準出力に出すコマンド
+
+// filterManifest は、マニフェストのファイルを、フィルターのコマンドが残したものだけにする
+func filterManifest(cmd string, m *cfs.Manifest) (*cfs.Manifest, error) {
 	if cmd == "" {
-		return b, nil
+		return m, nil
 	}
-
-	entries := b.Contents
-	files := make([]string, 0, len(entries))
-	for _, e := range entries {
-		files = append(files, e.Path)
+	paths := make([]string, 0, len(m.Contents))
+	for path := range m.Contents {
+		paths = append(paths, path)
 	}
-	files, err := runFilter(cmd, files)
-	check(err)
-
-	fileDict := make(map[string]bool, len(entries))
-	for _, f := range files {
-		fileDict[f] = true
-	}
-
-	newEntries := make(map[string]cfs.Content, len(entries))
-	for _, e := range entries {
-		_, ok := fileDict[e.Path]
-		if ok {
-			newEntries[e.Path] = e
-		}
-	}
-	entries = newEntries
-
-	return &cfs.Manifest{
-		Contents: entries,
-		Tag:      b.Tag,
-	}, nil
-}
-
-func filterPackFile(cmd string, pak *pack.PackFile) (*pack.PackFile, error) {
-	entries := pak.Entries
-	if cmd == "" {
-		return pak, nil
-	}
-	files := make([]string, 0, len(entries))
-	for _, e := range entries {
-		files = append(files, e.Path)
-	}
-	files, err := runFilter(cmd, files)
-	check(err)
-
-	fileDict := make(map[string]bool, len(entries))
-	for _, f := range files {
-		fileDict[f] = true
-	}
-
-	newEntries := make([]pack.Entry, 0, len(entries))
-	for _, e := range entries {
-		_, ok := fileDict[e.Path]
-		if ok {
-			newEntries = append(newEntries, e)
-		}
-	}
-	entries = newEntries
-
-	return &pack.PackFile{
-		Version: pack.PackFileVersion,
-		Entries: entries,
-	}, nil
-}
-
-func runFilter(cmdStr string, files []string) ([]string, error) {
-	out, err := runCommand(cmdStr, strings.Join(files, "\n"))
+	keep, err := filterPaths(cmd, paths)
 	if err != nil {
 		return nil, err
 	}
-	lf := regexp.MustCompile("\r\n|\n\r|\n|\r")
-	return lf.Split(strings.TrimRight(out, "\n"), -1), nil
+
+	filtered := cfs.NewManifest()
+	filtered.Tag = m.Tag
+	for path, c := range m.Contents {
+		if keep[path] {
+			filtered.Contents[path] = c
+		}
+	}
+	return filtered, nil
 }
 
-func runCommand(cmdStr string, input string) (string, error) {
-	commands := strings.Split(cmdStr, " ")
-	cmd := exec.Command(commands[0], commands[1:]...)
-
-	cmd.Stderr = os.Stderr
-
-	stdin, err := cmd.StdinPipe()
-	check(err)
-
-	go func() {
-		_, err = io.Copy(stdin, bytes.NewBufferString(input))
-		check(err)
-		err = stdin.Close()
-		check(err)
-	}()
-
-	var outbuf bytes.Buffer
-	cmd.Stdout = &outbuf
-
-	err = cmd.Start()
-	check(err)
-
-	err = cmd.Wait()
-	out := outbuf.String()
+// filterPackFile は、パックのファイルを、フィルターのコマンドが残したものだけにする
+func filterPackFile(cmd string, pak *pack.PackFile) (*pack.PackFile, error) {
+	if cmd == "" {
+		return pak, nil
+	}
+	paths := make([]string, 0, len(pak.Entries))
+	for _, e := range pak.Entries {
+		paths = append(paths, e.Path)
+	}
+	keep, err := filterPaths(cmd, paths)
 	if err != nil {
-		if out == "" {
-			return "", fmt.Errorf("no output from filter")
-		}
-		return "", err
+		return nil, err
 	}
 
-	return out, nil
+	entries := make([]pack.Entry, 0, len(pak.Entries))
+	for _, e := range pak.Entries {
+		if keep[e.Path] {
+			entries = append(entries, e)
+		}
+	}
+	return pack.NewPackFile(entries), nil
+}
+
+// filterPaths は、フィルターのコマンドにパスの一覧を渡し、残すパスの集合を返す
+func filterPaths(cmd string, paths []string) (map[string]bool, error) {
+	args, err := splitCommand(cmd)
+	if err != nil {
+		return nil, err
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("empty filter command")
+	}
+
+	var stdout bytes.Buffer
+	c := exec.Command(args[0], args[1:]...)
+	c.Stdin = strings.NewReader(strings.Join(paths, "\n"))
+	c.Stdout = &stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		return nil, fmt.Errorf("filter command %q failed: %w", cmd, err)
+	}
+
+	keep := map[string]bool{}
+	for _, line := range strings.FieldsFunc(stdout.String(), func(r rune) bool { return r == '\n' || r == '\r' }) {
+		keep[line] = true
+	}
+	return keep, nil
+}
+
+// splitCommand は、コマンドの文字列を空白で区切る。"..." や '...' で囲めば、空白を含められる
+func splitCommand(s string) ([]string, error) {
+	var args []string
+	var cur strings.Builder
+	inArg := false
+	var quote rune
+	for _, r := range s {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '"' || r == '\'':
+			quote = r
+			inArg = true
+		case r == ' ' || r == '\t':
+			if inArg {
+				args = append(args, cur.String())
+				cur.Reset()
+				inArg = false
+			}
+		default:
+			cur.WriteRune(r)
+			inArg = true
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unclosed quote in command: %s", s)
+	}
+	if inArg {
+		args = append(args, cur.String())
+	}
+	return args, nil
 }

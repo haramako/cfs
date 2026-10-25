@@ -3,7 +3,6 @@ package cfs
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 // FileStorage は、手元のフォルダをキャビネットにする
 type FileStorage struct {
 	CabinetPath string // キャビネットのフォルダ（絶対パス）
+	Log         Logger
 
 	mutex sync.Mutex
 	locks map[string]*sync.Mutex
@@ -39,11 +39,15 @@ func (s *FileStorage) lockKey(key string) func() {
 
 // NewFileStorage は、手元のパスのフォルダをキャビネットにする
 func NewFileStorage(cabinetPath string) (*FileStorage, error) {
+	return newFileStorage(cabinetPath, nil)
+}
+
+func newFileStorage(cabinetPath string, log Logger) (*FileStorage, error) {
 	abs, err := filepath.Abs(cabinetPath)
 	if err != nil {
 		return nil, err
 	}
-	return &FileStorage{CabinetPath: abs}, nil
+	return &FileStorage{CabinetPath: abs, Log: log}, nil
 }
 
 func (s *FileStorage) fullPath(key string) string {
@@ -78,9 +82,7 @@ func (s *FileStorage) Put(key string, body []byte, overwrite bool) error {
 		return err
 	}
 
-	if Verbose {
-		fmt.Printf("uploading '%s'\n", key)
-	}
+	s.Log.Printf("uploading '%s'\n", key)
 	return nil
 }
 

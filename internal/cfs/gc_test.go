@@ -8,6 +8,17 @@ import (
 )
 
 // gcTest は、時刻を進めながら GC を試すための仕掛け
+// gcTestConfig は、GC のテストでアップロードする設定。暗号化したマニフェストを GC が読めることも確かめる
+var gcTestConfig = &Config{Compress: true, Recursive: true, EncryptKey: "gc-test-key-1234567890"}
+
+func gcTestKeys(t *testing.T) *KeyRing {
+	keys, err := gcTestConfig.KeyRing()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keys
+}
+
 type gcTest struct {
 	t   *testing.T
 	s   Storage
@@ -66,12 +77,12 @@ func runGCTest(t *testing.T, f func(t *testing.T, g *gcTest)) {
 }
 
 func (g *gcTest) upload(tag string, files map[string]string) *Manifest {
-	return uploadTo(g.t, g.s, tag, files)
+	return uploadWith(g.t, g.s, gcTestConfig, tag, files)
 }
 
 func (g *gcTest) gc(dryRun bool) *GCResult {
 	g.t.Helper()
-	r, err := RunGC(g.s, g.f, GCOptions{DryRun: dryRun, Retention: 10 * 24 * time.Hour, Interval: time.Hour, Now: g.now})
+	r, err := RunGC(g.s, g.f, GCOptions{DryRun: dryRun, Retention: 10 * 24 * time.Hour, Interval: time.Hour, Now: g.now, Keys: gcTestKeys(g.t)})
 	if err != nil {
 		g.t.Fatal(err)
 	}
@@ -213,7 +224,7 @@ func TestGCAbortsOnUnreadableLiveManifest(t *testing.T) {
 		g.s.Put(manifestKey(broken), []byte("broken"), true)
 		g.s.Put(tagKey("broken"), []byte(broken), true)
 
-		if _, err := RunGC(g.s, g.f, GCOptions{Retention: time.Hour, Now: g.now}); err == nil || !strings.Contains(err.Error(), "abort") {
+		if _, err := RunGC(g.s, g.f, GCOptions{Retention: time.Hour, Now: g.now, Keys: gcTestKeys(t)}); err == nil || !strings.Contains(err.Error(), "abort") {
 			t.Errorf("GC must abort when a live manifest is unreadable, but %v", err)
 		}
 	})
@@ -276,6 +287,16 @@ func TestTags(t *testing.T) {
 		}
 		if err := DeleteTags(g.s, []string{"../config.json"}); err == nil {
 			t.Errorf("invalid tag name must be rejected")
+		}
+	})
+}
+
+func TestGCAbortsWithoutKey(t *testing.T) {
+	runGCTest(t, func(t *testing.T, g *gcTest) {
+		g.upload("v1", map[string]string{"a.txt": "a"})
+		// 鍵がないと、暗号化したマニフェストが読めないので中止する
+		if _, err := RunGC(g.s, g.f, GCOptions{Now: g.now}); err == nil || !strings.Contains(err.Error(), "abort") {
+			t.Errorf("GC must abort without the key, but %v", err)
 		}
 	})
 }

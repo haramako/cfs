@@ -153,9 +153,15 @@ func TestManifestSignature(t *testing.T) {
 // uploadTo は、キャビネットに内容をアップロードし、マニフェストを返す
 func uploadTo(t *testing.T, s Storage, tag string, files map[string]string) *Manifest {
 	t.Helper()
+	return uploadWith(t, s, nil, tag, files)
+}
+
+// uploadWith は、設定を指定してアップロードする
+func uploadWith(t *testing.T, s Storage, cfg *Config, tag string, files map[string]string) *Manifest {
+	t.Helper()
 	m := NewManifest()
 	m.Tag = tag
-	c := &Client{Manifest: m, Storage: s}
+	c := &Client{Manifest: m, Storage: s, Config: cfg}
 	if err := c.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -192,14 +198,9 @@ func TestValidateCache(t *testing.T) {
 }
 
 func TestDownloaderVerifiesHash(t *testing.T) {
-	saved := *Option
-	defer func() { *Option = saved }()
-	t.Setenv("USERPROFILE", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-
 	s, _ := NewDummyStorage("")
 	m := uploadTo(t, s, "v1", map[string]string{"a.txt": "hello"})
-	d := &Downloader{fetcher: s}
+	d := openTestDownloader(t, s, nil)
 
 	loaded, err := d.LoadManifest("v1")
 	if err != nil {
@@ -218,24 +219,20 @@ func TestDownloaderVerifiesHash(t *testing.T) {
 }
 
 func TestSignedManifestRoundTrip(t *testing.T) {
-	saved := *Option
-	defer func() { *Option = saved }()
-	t.Setenv("USERPROFILE", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-
 	private, public, _ := GenerateSigningKey()
-	Option.SigningKey = private
-	Option.VerifyKeys = []string{public}
+	signing := DefaultConfig()
+	signing.SigningKey = private
+	verifying := testConfig(t)
+	verifying.VerifyKeys = []string{public}
 
 	s, _ := NewDummyStorage("")
-	uploadTo(t, s, "v1", map[string]string{"a.txt": "hello"})
-	d := &Downloader{fetcher: s}
+	uploadWith(t, s, signing, "v1", map[string]string{"a.txt": "hello"})
+	d := openTestDownloader(t, s, verifying)
 	if _, err := d.LoadManifest("v1"); err != nil {
 		t.Errorf("signed manifest must be loaded: %v", err)
 	}
 
 	// 署名しないでアップロードしたものは、VerifyKeys があると読めない
-	Option.SigningKey = ""
 	uploadTo(t, s, "v2", map[string]string{"a.txt": "unsigned"})
 	if _, err := d.LoadManifest("v2"); err == nil {
 		t.Errorf("unsigned manifest must be rejected")

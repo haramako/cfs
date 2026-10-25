@@ -37,6 +37,6 @@
 
 ## 圧縮・暗号化の属性
 
-- ファイルごとの属性は `Manifest.GetAttribute` で決まる（既定: `Compress` なら圧縮、`EncryptKey` があれば暗号化）
+- ファイルごとの属性は `Client.attribute` で決まる（既定: `Compress` なら圧縮、`EncryptKey` があれば暗号化）
 - 拡張子 `.ab` `.raw` `.pbx` `.mp4` は **常に無圧縮・無暗号**（AssetBundle はクライアントでの復号コストが高いため意図的に無暗号、とオーナーに確認済み 2026-10-25）。コード上にハードコード
-- マニフェスト自体は `DefaultContentAttribute()` で置く。読む側も同じ設定が必要（GC だけは `decodeManifest` で 4 通りの属性を試して読む）
+- マニフェスト自体はアップロード側の設定の既定の属性（`Config.DefaultAttribute()`）で置く。読む側（Downloader と GC）は `decodeManifest` で 4 通りの属性を試して読むので、`Compress` の設定は一致していなくてよい

@@ -161,6 +161,8 @@ type GCOptions struct {
 	Retention time.Duration // 保持期間。0 ならキャビネットの設定（なければ既定値）
 	Interval  time.Duration // 候補にしてから消すまでに空ける最短の間隔。0 なら既定値
 	Now       time.Time     // 今の時刻（テスト用）。ゼロなら time.Now()
+	Keys      *KeyRing      // マニフェストを読む鍵（今の鍵と古い鍵）。nil なら鍵なし
+	Log       Logger
 }
 
 // GCResult は、GC の結果
@@ -207,9 +209,9 @@ func RunGC(s Storage, f Fetcher, opt GCOptions) (*GCResult, error) {
 	}
 	result := &GCResult{Retention: retention}
 
-	keys, err := Option.KeyRing()
-	if err != nil {
-		return nil, err
+	keys := opt.Keys
+	if keys == nil {
+		keys = &KeyRing{}
 	}
 
 	// 1. タグが指すマニフェスト
@@ -248,9 +250,7 @@ func RunGC(s Storage, f Fetcher, opt GCOptions) (*GCResult, error) {
 				return nil, fmt.Errorf("cannot read live manifest %s, abort GC: %w", m.Key, err)
 			}
 			// 消す候補のマニフェストが読めない（古い鍵など）場合、その中身を守れないので、今回はデータを消さない
-			if Verbose {
-				fmt.Printf("cannot read old manifest %s: %v\n", m.Key, err)
-			}
+			opt.Log.Printf("cannot read old manifest %s: %v\n", m.Key, err)
 			unreadable = true
 			continue
 		}

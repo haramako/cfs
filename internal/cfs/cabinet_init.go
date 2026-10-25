@@ -102,9 +102,6 @@ func initS3Cabinet(bucket string, opt InitOptions, optFns ...func(*s3.Options)) 
 
 	region := opt.Region
 	if region == "" {
-		region = Option.S3Region
-	}
-	if region == "" {
 		region = cfg.Region
 	}
 	if region == "" {

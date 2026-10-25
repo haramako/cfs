@@ -13,9 +13,11 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 cd "$WORK" || exit 1
 
-# ~/.cfs を汚さないようにホームを差し替える（Windows は USERPROFILE、他は HOME）
+# 手元のキャッシュを汚さないように、作業フォルダの中に置く
+# （古い cfs は ~/.cfs を使うのでホームを差し替え、2026-10-25 以降は CFS_CACHE_DIR を使う。Windows は USERPROFILE、他は HOME）
 export USERPROFILE="$(cygpath -w "$WORK/home" 2>/dev/null || echo "$WORK/home")"
 export HOME="$WORK/home"
+export CFS_CACHE_DIR="$(cygpath -w "$WORK/home/cache" 2>/dev/null || echo "$WORK/home/cache")"
 mkdir -p "$WORK/home"
 
 WORK_URL="$(cygpath -m "$WORK" 2>/dev/null || echo "$WORK")"

@@ -16,11 +16,9 @@ import (
 // setupServe は、手元のフォルダのキャビネットにファイルを上げ、それを返すサーバーを作る
 func setupServe(t *testing.T, files map[string]string) (*server, *httptest.Server, *cfs.Manifest) {
 	t.Helper()
-	t.Setenv("USERPROFILE", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	saved := *cfs.Option
-	t.Cleanup(func() { *cfs.Option = saved })
-	cfs.Option.EncryptKey = "serve-test-key-1234567890"
+	cfg := cfs.DefaultConfig()
+	cfg.EncryptKey = "serve-test-key-1234567890"
+	cfg.CacheDir = t.TempDir()
 
 	cabinet := t.TempDir()
 	storage, err := cfs.NewFileStorage(cabinet)
@@ -37,7 +35,7 @@ func setupServe(t *testing.T, files map[string]string) (*server, *httptest.Serve
 	}
 	m := cfs.NewManifest()
 	m.Tag = "v1"
-	client := &cfs.Client{Manifest: m, Storage: storage}
+	client := &cfs.Client{Manifest: m, Storage: storage, Config: cfg}
 	if err := client.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +46,7 @@ func setupServe(t *testing.T, files map[string]string) (*server, *httptest.Serve
 		t.Fatal(err)
 	}
 
-	d, err := cfs.NewDownloader(cabinet)
+	d, err := cfs.NewDownloader(cabinet, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

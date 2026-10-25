@@ -43,7 +43,7 @@ func setupFetcherDir(t *testing.T) string {
 }
 
 func TestFileFetcherFromPath(t *testing.T) {
-	f, err := NewFetcher(setupFetcherDir(t))
+	f, err := OpenFetcher(setupFetcherDir(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestFileFetcherFromPath(t *testing.T) {
 }
 
 func TestFileFetcherFromURL(t *testing.T) {
-	f, err := NewFetcher(PathToFileURL(setupFetcherDir(t)).String())
+	f, err := OpenFetcher(PathToFileURL(setupFetcherDir(t)).String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestHttpFetcher(t *testing.T) {
 	defer server.Close()
 
 	// 末尾の "/" がなくても使えること
-	f, err := NewFetcher(server.URL)
+	f, err := OpenFetcher(server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestHttpFetcherError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	f, err := NewFetcher(server.URL + "/")
+	f, err := OpenFetcher(server.URL + "/", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,8 +160,8 @@ func TestFileStorageListAndDelete(t *testing.T) {
 	}
 }
 
-func TestNewFetcherUnsupported(t *testing.T) {
-	if _, err := NewFetcher("ftp://example.com/"); err == nil {
+func TestOpenFetcherUnsupported(t *testing.T) {
+	if _, err := OpenFetcher("ftp://example.com/", nil); err == nil {
 		t.Error("ftp must be unsupported")
 	}
 }

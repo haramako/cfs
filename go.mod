@@ -9,7 +9,6 @@ require (
 	github.com/aws/smithy-go v1.28.6
 	github.com/natefinch/atomic v1.0.1
 	github.com/urfave/cli/v3 v3.14.0
-	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
 )

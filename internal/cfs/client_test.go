@@ -1,6 +1,7 @@
 package cfs
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -45,5 +46,35 @@ func TestUploadWithFailure(t *testing.T) {
 		if ok, _ := storage.Exists(dataKey(c.Hash)); !ok {
 			t.Errorf("data of %s must be uploaded", c.Path)
 		}
+	}
+}
+
+func TestUploadFailureKeepsManifest(t *testing.T) {
+	storage, _ := NewDummyStorage("")
+	storage.onPut = func(key string, body []byte, overwrite bool) error {
+		if strings.HasPrefix(key, "data/") && string(body) == "broken" {
+			return errors.New("put failed")
+		}
+		return nil
+	}
+
+	manifest := NewManifest()
+	manifest.Tag = "v1"
+	client := &Client{Manifest: manifest, Storage: storage, Config: &Config{}}
+	if err := client.Init(); err != nil {
+		t.Fatal(err)
+	}
+	client.AddContent("ok", []byte("ok"))
+	client.AddContent("broken", []byte("broken"))
+
+	// 中身を置けなかったら、マニフェストもタグも置かずに失敗する
+	if err := client.Finish(); err == nil || !strings.Contains(err.Error(), "put failed") {
+		t.Fatalf("finish must fail, but %v", err)
+	}
+	if list, _ := storage.List("manifest/"); len(list) != 0 {
+		t.Errorf("manifest must not be uploaded: %v", list)
+	}
+	if ok, _ := storage.Exists(tagKey("v1")); ok {
+		t.Errorf("tag must not be uploaded")
 	}
 }

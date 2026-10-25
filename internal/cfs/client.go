@@ -20,24 +20,32 @@ type uploadRequest struct {
 type Client struct {
 	Manifest  *Manifest
 	Storage   Storage
+	Config    *Config // nil なら既定の設定
 	MaxWorker int
 	waitGroup sync.WaitGroup
 	queue     chan uploadRequest
 	queued    map[string]bool // 今回のアップロードで既に送ったデータ（同じ中身を2回送らない）
+	cfg       *Config
 	keys      *KeyRing
 	signer    *SigningKey
+	log       Logger
+
+	errMutex sync.Mutex
+	err      error // アップロードで最初に起きたエラー
 }
 
 func (c *Client) Init() error {
 	if c.MaxWorker == 0 {
 		c.MaxWorker = 32
 	}
+	c.cfg = c.Config.orDefault()
+	c.log = c.cfg.Logger()
 
 	var err error
-	if c.keys, err = Option.KeyRing(); err != nil {
+	if c.keys, err = c.cfg.KeyRing(); err != nil {
 		return err
 	}
-	if c.signer, err = Option.Signer(); err != nil {
+	if c.signer, err = c.cfg.Signer(); err != nil {
 		return err
 	}
 
@@ -56,12 +64,23 @@ func (c *Client) uploadWorker() {
 	defer c.waitGroup.Done()
 
 	for req := range c.queue {
-		// エラーのまま進むと、中身がないマニフェストを置いてしまうので止める
-		err := c.Storage.Put(req.Key, req.Data, false)
-		if err != nil {
-			panic(err)
+		if c.uploadError() != nil {
+			continue // 失敗したら、残りは送らずに捨てる
+		}
+		if err := c.Storage.Put(req.Key, req.Data, false); err != nil {
+			c.errMutex.Lock()
+			if c.err == nil {
+				c.err = fmt.Errorf("upload %s: %w", req.Filename, err)
+			}
+			c.errMutex.Unlock()
 		}
 	}
+}
+
+func (c *Client) uploadError() error {
+	c.errMutex.Lock()
+	defer c.errMutex.Unlock()
+	return c.err
 }
 
 // Encode は、属性に従って圧縮・暗号化し、キャビネットに置くデータとそのハッシュを返す
@@ -111,9 +130,7 @@ func (c *Client) AddFiles(root string) error {
 			return err
 		}
 		if info == nil {
-			if Verbose {
-				fmt.Printf("%s not found\n", path2)
-			}
+			c.log.Printf("%s not found\n", path2)
 			return nil
 		}
 
@@ -145,7 +162,7 @@ func (c *Client) AddFiles(root string) error {
 				c.AddFile(root, path2[len(root)+1:], info)
 			}
 		} else {
-			if !Option.Recursive && root != path2 {
+			if !c.cfg.Recursive && root != path2 {
 				return filepath.SkipDir
 			}
 		}
@@ -157,10 +174,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 	m := c.Manifest
 
 	fullPath := filepath.Join(root, relative)
-	key := filepath.ToSlash(relative)
-	if Option.Flatten {
-		key = filepath.Base(key)
-	}
+	key := c.contentKey(relative)
 	old, found := m.Contents[key]
 	if found {
 		m.Contents[key] = Content{
@@ -191,15 +205,13 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		return false, nil
 	}
 
-	attr := m.GetAttribute(relative)
+	attr := c.attribute(relative)
 	hash, size, err := c.Upload(relative, origData, attr)
 	if err != nil {
 		return false, err
 	}
 
-	if Verbose {
-		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
-	}
+	c.log.Printf("changed file %-12s (%s)\n", relative, hash)
 
 	m.Contents[key] = Content{
 		Path:     key,
@@ -218,22 +230,17 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 func (c *Client) AddContent(relative string, content []byte) (bool, error) {
 	m := c.Manifest
 
-	key := filepath.ToSlash(relative)
-	if Option.Flatten {
-		key = filepath.Base(key)
-	}
+	key := c.contentKey(relative)
 
 	origHash := SumHash(content)
 
-	attr := m.GetAttribute(relative)
+	attr := c.attribute(relative)
 	hash, size, err := c.Upload(relative, content, attr)
 	if err != nil {
 		return false, err
 	}
 
-	if Verbose {
-		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
-	}
+	c.log.Printf("changed file %-12s (%s)\n", relative, hash)
 
 	m.Contents[key] = Content{
 		Path:     key,
@@ -249,17 +256,35 @@ func (c *Client) AddContent(relative string, content []byte) (bool, error) {
 	return true, nil
 }
 
-func (c *Client) Finish() error {
+// contentKey は、ファイルのマニフェストでのパスを返す
+func (c *Client) contentKey(relative string) string {
+	key := filepath.ToSlash(relative)
+	if c.cfg.Flatten {
+		key = filepath.Base(key)
+	}
+	return key
+}
 
+// attribute は、ファイルの圧縮・暗号化の属性を返す。
+// 大きく、実行時に復号するコストが高いもの（.ab など）は、圧縮も暗号化もしない
+func (c *Client) attribute(path string) ContentAttribute {
+	switch filepath.Ext(path) {
+	case ".ab", ".raw", ".pbx", ".mp4":
+		return NoContentAttribute
+	}
+	return c.cfg.DefaultAttribute()
+}
+
+// Finish は、アップロードが終わるのを待ってから、マニフェストを置く。
+// 失敗したものがあれば、中身が欠けたマニフェストを置かないように、マニフェストは置かずにエラーを返す
+func (c *Client) Finish() error {
 	close(c.queue)
 	c.waitGroup.Wait()
 
-	err := c.UploadManifest()
-	if err != nil {
+	if err := c.uploadError(); err != nil {
 		return err
 	}
-
-	return nil
+	return c.UploadManifest()
 }
 
 func (c *Client) UploadManifest() error {
@@ -267,7 +292,7 @@ func (c *Client) UploadManifest() error {
 
 	origData := m.Dump(c.signer)
 
-	hash, data, err := c.Encode(origData, DefaultContentAttribute())
+	hash, data, err := c.Encode(origData, c.cfg.DefaultAttribute())
 	if err != nil {
 		return err
 	}
@@ -285,10 +310,10 @@ func (c *Client) UploadManifest() error {
 			return err
 		}
 
-		os.WriteFile(filepath.FromSlash(m.Path)+".hash", []byte(m.Hash), 0666)
-		if Verbose {
-			fmt.Printf("write manifest to '%s' (%s)\n", m.Path, m.Hash)
+		if err := os.WriteFile(filepath.FromSlash(m.Path)+".hash", []byte(m.Hash), 0666); err != nil {
+			return err
 		}
+		c.log.Printf("write manifest to '%s' (%s)\n", m.Path, m.Hash)
 	}
 
 	// タグが設定されているなら、保存する

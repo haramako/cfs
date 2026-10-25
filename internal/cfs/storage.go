@@ -1,6 +1,7 @@
 package cfs
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -21,7 +22,7 @@ type ObjectInfo struct {
 	LastModified time.Time
 }
 
-// Storage は、キャビネットへの書き込み口。ストレージを足すときは、これを実装して StorageFromUrl に追加する
+// Storage は、キャビネットへの書き込み口。ストレージを足すときは、これを実装して OpenStorage に追加する
 type Storage interface {
 	// Put は key にデータを書く。overwrite が false で、既にあれば書かない
 	Put(key string, body []byte, overwrite bool) error
@@ -33,36 +34,34 @@ type Storage interface {
 	Delete(keys []string) error
 }
 
-func StorageFromUrl(cabinetUrl *url.URL) (Storage, error) {
-	// ストレージを足すときは、ここに URL スキームを追加する
-	switch cabinetUrl.Scheme {
-	case "gs":
-		return nil, fmt.Errorf("gs:// (Google Cloud Storage) is not supported yet: %v", cabinetUrl)
-	case "s3":
-		storage, err := NewS3Storage(cabinetUrl.Host)
-		if err != nil {
-			return nil, err
-		}
-		return storage, nil
-	case "file":
-		path, err := FileURLToPath(cabinetUrl)
-		if err != nil {
-			return nil, err
-		}
-		return NewFileStorage(path)
-	default:
-		return nil, fmt.Errorf("invalid url %v", cabinetUrl)
+// OpenStorage は、キャビネットの指定（URL か手元のパス）からストレージを作る。cfg が nil なら既定の設定を使う
+func OpenStorage(cabinet string, cfg *Config) (Storage, error) {
+	cfg = cfg.orDefault()
+	if cabinet == "" {
+		return nil, errNoCabinet
 	}
-}
-
-// StorageFromString は、キャビネットの指定（URL か手元のパス）からストレージを作る
-func StorageFromString(cabinet string) (Storage, error) {
 	if !IsURL(cabinet) {
-		return NewFileStorage(cabinet)
+		return newFileStorage(cabinet, cfg.Logger())
 	}
 	cabinetUrl, err := url.Parse(cabinet)
 	if err != nil {
 		return nil, err
 	}
-	return StorageFromUrl(cabinetUrl)
+	// ストレージを足すときは、ここに URL スキームを追加する
+	switch cabinetUrl.Scheme {
+	case "gs":
+		return nil, fmt.Errorf("gs:// (Google Cloud Storage) is not supported yet: %v", cabinetUrl)
+	case "s3":
+		return NewS3Storage(cabinetUrl.Host, cfg.S3Region, cfg.Logger())
+	case "file":
+		path, err := FileURLToPath(cabinetUrl)
+		if err != nil {
+			return nil, err
+		}
+		return newFileStorage(path, cfg.Logger())
+	default:
+		return nil, fmt.Errorf("invalid url %v", cabinetUrl)
+	}
 }
+
+var errNoCabinet = errors.New("no cabinet: set Cabinet in .cfsenv or use -c")

@@ -3,12 +3,12 @@ package main
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/haramako/cfs/internal/cfs"
@@ -20,9 +20,9 @@ var revision string
 // エントリーポイント
 
 func main() {
-	err := newApp().Run(context.Background(), os.Args)
-	if err != nil {
-		fmt.Println(err)
+	if err := newApp().Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
 	}
 }
 
@@ -43,12 +43,6 @@ func newApp() *cli.Command {
 			Aliases: []string{"C"},
 			Value:   ".cfsenv",
 			Usage:   "config file",
-		},
-		&cli.StringFlag{
-			Name:    "setting",
-			Aliases: []string{"S"},
-			Value:   ".cfs_setting",
-			Usage:   "setting file",
 		},
 		&cli.StringFlag{
 			Name:    "cabinet",
@@ -77,7 +71,6 @@ func newApp() *cli.Command {
 		catCommand,
 		lsCommand,
 		configCommand,
-		settingCommand,
 		serveCommand,
 		packCommand,
 		unpackCommand,
@@ -91,62 +84,62 @@ func newApp() *cli.Command {
 	return app
 }
 
-func check(err error) {
+// loadConfig は、.cfsenv と環境変数に、コマンドラインの指定を重ねた設定を作る
+func loadConfig(c *cli.Command) (*cfs.Config, error) {
+	cfg, err := cfs.LoadConfig(c.String("config"))
 	if err != nil {
-		panic(err)
-		//fmt.Println(err)
-		//os.Exit(1)
+		return nil, err
 	}
-}
-
-func loadConfig(c *cli.Command) {
-	cfs.InitDefaultSetting()
-
-	cfs.Verbose = c.Bool("verbose")
-	err := cfs.LoadDefaultOptions(c.String("config"))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	cfg.Verbose = c.Bool("verbose")
 
 	// コマンドラインで指定された相対パスは、今のフォルダを基準にする
 	cwd, err := os.Getwd()
-	check(err)
-
-	if c.String("cabinet") != "" {
-		cfs.Option.Cabinet, err = cfs.ResolveLocation(c.String("cabinet"), cwd)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+	if err != nil {
+		return nil, err
+	}
+	if s := c.String("cabinet"); s != "" {
+		if cfg.Cabinet, err = cfs.ResolveLocation(s, cwd); err != nil {
+			return nil, err
+		}
+	}
+	if s := c.String("url"); s != "" {
+		if cfg.Url, err = cfs.ResolveLocation(s, cwd); err != nil {
+			return nil, err
 		}
 	}
 
-	if c.String("url") != "" {
-		cfs.Option.Url, err = cfs.ResolveLocation(c.String("url"), cwd)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-	}
-
-	if c.Bool("force") {
-		cfs.Option.NoCache = true
-	}
+	cfg.Logger().Printf("config: %s\n", cfg)
+	return cfg, nil
 }
 
-// ダウンロード元を取得する
-// Option.Url が指定されていない場合は、キャビネット（手元のフォルダや S3）から直接読む
-func getDownloaderURL() string {
-	if cfs.Option.Url != "" {
-		return cfs.Option.Url
+// needArgs は、引数の数が min 以上 max 以下（max が負なら上限なし）かを確かめる
+func needArgs(c *cli.Command, min, max int) ([]string, error) {
+	args := c.Args().Slice()
+	if len(args) < min || (max >= 0 && len(args) > max) {
+		return nil, fmt.Errorf("usage: cfs %s %s", c.Name, c.ArgsUsage)
 	}
-	return cfs.Option.Cabinet
+	return args, nil
+}
+
+// openDownloader は、設定のダウンロード元から読む Downloader を作る
+func openDownloader(cfg *cfs.Config) (*cfs.Downloader, error) {
+	return cfs.NewDownloader(cfg.DownloadLocation(), cfg)
+}
+
+// loadManifest は、ダウンロード元からマニフェストを読み、--filter-cmd があれば絞り込む
+func loadManifest(c *cli.Command, d *cfs.Downloader, location string) (*cfs.Manifest, error) {
+	manifest, err := d.LoadManifest(location)
+	if err != nil {
+		return nil, err
+	}
+	return filterManifest(c.String("filter-cmd"), manifest)
 }
 
 var uploadCommand = &cli.Command{
-	Name:   "upload",
-	Usage:  "upload files to cabinet",
-	Action: doUpload,
+	Name:      "upload",
+	Usage:     "upload files to cabinet",
+	Action:    doUpload,
+	ArgsUsage: "[dir ...]",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:    "tag",
@@ -169,82 +162,85 @@ var uploadCommand = &cli.Command{
 	},
 }
 
-var hex = []byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
-
-// ファイル名に使える文字列に変換する
-// "0-9A-Za-z_-$." はそのままで、それ以外はURLエンコードを行う
-func escapeFilename(s string) string {
-	r := make([]byte, 0, len(s)*3)
-	for _, c := range []byte(s) {
-		if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-' || c == '_' || c == '.' || c == '$' {
-			r = append(r, c)
-		} else {
-			r = append(r, '%')
-			r = append(r, hex[(c>>4)&0x0f])
-			r = append(r, hex[(c>>0)&0x0f])
-		}
+// uploadCachePath は、前回アップロードしたマニフェストを置く手元のファイルを返す。
+// キャビネット・今のフォルダ・上げるフォルダの組ごとに、別のファイルにする
+func uploadCachePath(cfg *cfs.Config, dirs []string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
 	}
-	return string(r)
+	h := sha256.New()
+	for _, s := range append([]string{cfg.Cabinet, cwd}, dirs...) {
+		h.Write([]byte(s))
+		h.Write([]byte{0})
+	}
+	cacheDir, err := cfg.ManifestCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cacheDir, hex.EncodeToString(h.Sum(nil))), nil
 }
 
 func doUpload(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	log := cfg.Logger()
 
 	args := c.Args().Slice()
 	if len(args) == 0 {
 		args = []string{"."}
 	}
 
-	output := c.String("output")
-	manifestPath := c.String("manifest")
-	if manifestPath == "" {
-		// manifestが指定されていない場合は、自動でパスを作成する
-		cwd, err := filepath.Abs(".")
-		check(err)
-
-		absDirs := []string{}
-		for _, dir := range args {
-			absDir, err := filepath.Abs(dir)
-			check(err)
-			absDirs = append(absDirs, absDir)
-		}
-		filename := cfs.Option.Cabinet + "$" + cwd + "$" + strings.Join(absDirs, "$")
-		filename = escapeFilename(filename)
-		filename = fmt.Sprintf("%x", md5.Sum([]byte(filename)))
-		// println("cachefile = " + filename)
-		manifestPath = filepath.Join(cfs.GlobalCacheDir(), filename)
-	}
-
 	tag := c.String("tag")
 	if tag != "" {
 		if err := cfs.ValidateTagName(tag); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return err
 		}
 	}
 
-	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-	check(err)
+	manifestPath := c.String("manifest")
+	if manifestPath == "" {
+		absDirs := make([]string, 0, len(args))
+		for _, dir := range args {
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			absDirs = append(absDirs, abs)
+		}
+		if manifestPath, err = uploadCachePath(cfg, absDirs); err != nil {
+			return err
+		}
+	}
+
+	storage, err := cfs.OpenStorage(cfg.Cabinet, cfg)
+	if err != nil {
+		return err
+	}
 
 	// 形式の版が違うキャビネットには書かない
-	cabinetFetcher, err := cfs.NewFetcher(cfs.Option.Cabinet)
-	check(err)
+	cabinetFetcher, err := cfs.OpenFetcher(cfg.Cabinet, cfg)
+	if err != nil {
+		return err
+	}
 	if err := cfs.CheckCabinetFormat(cabinetFetcher); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	var manifest *cfs.Manifest
-	if !cfs.Option.NoCache {
-		manifest, err = cfs.ManifestFromFile(manifestPath)
-		check(err)
+	if !c.Bool("force") {
+		if manifest, err = cfs.ManifestFromFile(manifestPath, log); err != nil {
+			return err
+		}
 		// 前回のマニフェストが GC で消えていたら、中身も消えているかもしれないので、キャッシュを使わない
 		ok, err := manifest.ValidateCache(storage)
-		check(err)
+		if err != nil {
+			return err
+		}
 		if !ok {
-			if cfs.Verbose {
-				fmt.Printf("previous manifest %s is not in the cabinet, check all files\n", manifest.Hash)
-			}
+			log.Printf("previous manifest %s is not in the cabinet, check all files\n", manifest.Hash)
 			manifest = nil
 		}
 	}
@@ -257,19 +253,26 @@ func doUpload(_ context.Context, c *cli.Command) error {
 	client := &cfs.Client{
 		Storage:  storage,
 		Manifest: manifest,
+		Config:   cfg,
 	}
-
-	check(client.Init())
-
+	if err := client.Init(); err != nil {
+		return err
+	}
 	for _, path := range args {
-		check(client.AddFiles(path))
+		if err := client.AddFiles(path); err != nil {
+			return err
+		}
 	}
 
-	manifest.RemoveUntouched()
-	check(client.Finish())
+	for _, path := range manifest.RemoveUntouched() {
+		log.Printf("removed: %s\n", path)
+	}
+	if err := client.Finish(); err != nil {
+		return err
+	}
 
-	if output != "" {
-		check(os.WriteFile(output, []byte(manifest.Hash), 0777))
+	if output := c.String("output"); output != "" {
+		return os.WriteFile(output, []byte(manifest.Hash), 0666)
 	}
 	return nil
 }
@@ -282,32 +285,24 @@ var syncCommand = &cli.Command{
 }
 
 func doSync(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	var args = c.Args().Slice()
-	if len(args) != 2 {
-		fmt.Println("need just 2 arguments")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	args, err := needArgs(c, 2, 2)
+	if err != nil {
+		return err
 	}
 
-	location := args[0]
-	dir := args[1]
-
-	downloader, err := cfs.NewDownloader(getDownloaderURL())
-	check(err)
-
-	manifest, err := downloader.LoadManifest(location)
-	check(err)
-
-	filter := c.String("filter-cmd")
-
-	if filter != "" {
-		manifest, err = filterManifest(filter, manifest)
-		check(err)
+	downloader, err := openDownloader(cfg)
+	if err != nil {
+		return err
 	}
-
-	check(downloader.Sync(manifest, dir))
-	return nil
+	manifest, err := loadManifest(c, downloader, args[0])
+	if err != nil {
+		return err
+	}
+	return downloader.Sync(manifest, args[1])
 }
 
 var mergeCommand = &cli.Command{
@@ -326,65 +321,61 @@ var mergeCommand = &cli.Command{
 }
 
 func doMerge(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	var args = c.Args().Slice()
-	if len(args) < 2 {
-		fmt.Println("need at least 2 arguments")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	log := cfg.Logger()
+	args, err := needArgs(c, 2, -1)
+	if err != nil {
+		return err
 	}
 
-	output := c.String("output")
-
 	mergeTo := args[0]
-	mergeFrom := args[1:]
-
-	downloader, err := cfs.NewDownloader(getDownloaderURL())
-	check(err)
-
 	if err := cfs.ValidateTagName(mergeTo); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
+	}
+
+	downloader, err := openDownloader(cfg)
+	if err != nil {
+		return err
 	}
 
 	merged := cfs.NewManifest()
 	merged.Tag = mergeTo
-
-	for _, location := range mergeFrom {
+	for _, location := range args[1:] {
 		manifest, err := downloader.LoadManifest(location)
-		check(err)
-		if cfs.Verbose {
-			fmt.Printf("%d files merged from %s\n", len(manifest.Contents), location)
+		if err != nil {
+			return err
 		}
+		log.Printf("%d files merged from %s\n", len(manifest.Contents), location)
 		merged.Merge(manifest)
 	}
 
-	filter := c.String("filter-cmd")
-
-	if filter != "" {
-		merged, err = filterManifest(filter, merged)
-		check(err)
+	if merged, err = filterManifest(c.String("filter-cmd"), merged); err != nil {
+		return err
 	}
-
-	if cfs.Verbose {
-		fmt.Printf("total %d files into %s\n", len(merged.Contents), mergeTo)
-	}
+	log.Printf("total %d files into %s\n", len(merged.Contents), mergeTo)
 
 	// マージしたマニフェストを書き込む
-	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-	check(err)
-
+	storage, err := cfs.OpenStorage(cfg.Cabinet, cfg)
+	if err != nil {
+		return err
+	}
 	client := &cfs.Client{
 		Storage:  storage,
 		Manifest: merged,
+		Config:   cfg,
+	}
+	if err := client.Init(); err != nil {
+		return err
+	}
+	if err := client.Finish(); err != nil {
+		return err
 	}
 
-	check(client.Init())
-
-	check(client.UploadManifest())
-
-	if output != "" {
-		check(os.WriteFile(output, []byte(merged.Hash), 0777))
+	if output := c.String("output"); output != "" {
+		return os.WriteFile(output, []byte(merged.Hash), 0666)
 	}
 	return nil
 }
@@ -397,34 +388,33 @@ var catCommand = &cli.Command{
 }
 
 func doCat(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	var args = c.Args().Slice()
-	if len(args) < 2 {
-		fmt.Println("need 2 arguments")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	args, err := needArgs(c, 2, 2)
+	if err != nil {
+		return err
 	}
 
-	location := args[0]
-	filename := args[1]
-
-	downloader, err := cfs.NewDownloader(getDownloaderURL())
-	check(err)
-
-	manifest, err := downloader.LoadManifest(location)
-	check(err)
-
-	content, ok := manifest.Contents[filename]
+	downloader, err := openDownloader(cfg)
+	if err != nil {
+		return err
+	}
+	manifest, err := downloader.LoadManifest(args[0])
+	if err != nil {
+		return err
+	}
+	content, ok := manifest.Contents[args[1]]
 	if !ok {
-		fmt.Println("file " + filename + " not found")
-		os.Exit(1)
+		return fmt.Errorf("file %s not found in %s", args[1], args[0])
 	}
-
 	data, err := downloader.Fetch(content.Hash, content.Attr)
-	check(err)
-
-	fmt.Print(string(data))
-	return nil
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(data)
+	return err
 }
 
 var lsCommand = &cli.Command{
@@ -441,48 +431,53 @@ var lsCommand = &cli.Command{
 }
 
 func doLs(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	var args = c.Args().Slice()
-	if len(args) != 1 {
-		fmt.Println("need just 1 arguments")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	args, err := needArgs(c, 1, 1)
+	if err != nil {
+		return err
 	}
 
-	verify := c.Bool("verify")
-
-	location := args[0]
-
-	downloader, err := cfs.NewDownloader(getDownloaderURL())
-	check(err)
-
-	manifest, err := downloader.LoadManifest(location)
-	check(err)
-
-	// To store the keys in slice in sorted order
-	var keys []string
-	for k := range manifest.Contents {
-		keys = append(keys, k)
+	downloader, err := openDownloader(cfg)
+	if err != nil {
+		return err
 	}
-	sort.Strings(keys)
+	manifest, err := downloader.LoadManifest(args[0])
+	if err != nil {
+		return err
+	}
 
-	if verify {
-		fileStatusList, err := downloader.ExistsAll(manifest)
-		check(err)
+	var paths []string
+	for path := range manifest.Contents {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
 
-		for _, k := range keys {
-			file := manifest.Contents[k]
-			status := "ng"
-			if fileStatusList[k] {
-				status = "ok"
+	if c.Bool("verify") {
+		exists, err := downloader.ExistsAll(manifest)
+		if err != nil {
+			return err
+		}
+		missing := 0
+		for _, path := range paths {
+			status := "ok"
+			if !exists[path] {
+				status = "ng"
+				missing++
 			}
-			fmt.Printf("%s\t%s\n", file.Path, status)
+			fmt.Printf("%s\t%s\n", path, status)
 		}
-	} else {
-		for _, k := range keys {
-			file := manifest.Contents[k]
-			fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
+		if missing > 0 {
+			return fmt.Errorf("%d files are missing in the cabinet", missing)
 		}
+		return nil
+	}
+
+	for _, path := range paths {
+		file := manifest.Contents[path]
+		fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
 	}
 	return nil
 }
@@ -494,22 +489,16 @@ var configCommand = &cli.Command{
 }
 
 func doConfig(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	fmt.Printf("Cabinet       : %s\n", cfs.Option.Cabinet)
-	fmt.Printf("Downloader URL: %s\n", getDownloaderURL())
-	return nil
-}
-
-var settingCommand = &cli.Command{
-	Name:   "setting",
-	Usage:  "show current setting",
-	Action: doSetting,
-}
-
-func doSetting(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	fmt.Printf("HomeRoot       : %s\n", cfs.Setting.HomeRoot)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	cacheDir, err := cfg.DataCacheDir()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Cabinet       : %s\n", cfg.Cabinet)
+	fmt.Printf("Downloader URL: %s\n", cfg.DownloadLocation())
+	fmt.Printf("Cache         : %s\n", filepath.Dir(cacheDir))
 	return nil
 }

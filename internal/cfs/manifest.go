@@ -14,9 +14,6 @@ import (
 // ExcludePatterns は除外するファイルのパターンを表す
 var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 
-// Verbose 詳細なログを表示するかどうか
-var Verbose = false
-
 // マニフェストの形式（形式 v2）
 //
 //	#cfs-manifest 2
@@ -60,18 +57,6 @@ type Content struct {
 	Touched  bool
 }
 
-// DefaultContentAttribute デフォルトのContentAttributeを取得する
-func DefaultContentAttribute() ContentAttribute {
-	var result ContentAttribute
-	if Option.Compress {
-		result |= Compressed
-	}
-	if Option.EncryptKey != "" {
-		result |= Crypted
-	}
-	return ContentAttribute(result)
-}
-
 // Compressed 圧縮するかどうかを返す
 func (c ContentAttribute) Compressed() bool {
 	return (int(c) & Compressed) != 0
@@ -89,20 +74,16 @@ func NewManifest() *Manifest {
 
 // ManifestFromFile は、手元のキャッシュからマニフェストを読む。
 // ファイルがない、または読めない（古い形式など）場合は、空のマニフェストを返す
-func ManifestFromFile(path string) (*Manifest, error) {
+func ManifestFromFile(path string, log Logger) (*Manifest, error) {
 	m := NewManifest()
 	m.Path = path
 	data, err := os.ReadFile(filepath.FromSlash(path))
 	if err != nil {
 		return m, nil
 	}
-	if Verbose {
-		fmt.Printf("read manifest from '%s'\n", m.Path)
-	}
+	log.Printf("read manifest from '%s'\n", m.Path)
 	if err := m.Parse(data, nil); err != nil {
-		if Verbose {
-			fmt.Printf("ignore local manifest cache '%s': %v\n", m.Path, err)
-		}
+		log.Printf("ignore local manifest cache '%s': %v\n", m.Path, err)
 		m = NewManifest()
 		m.Path = path
 		return m, nil
@@ -189,18 +170,17 @@ func (m *Manifest) Merge(from *Manifest) {
 	}
 }
 
-func (m *Manifest) RemoveUntouched() {
-	newContents := make(map[string]Content)
-	for _, c := range m.Contents {
-		if c.Touched {
-			newContents[c.Path] = c
-		} else {
-			if Verbose {
-				fmt.Printf("removed: %s\n", c.Path)
-			}
+// RemoveUntouched は、今回のアップロードで見つからなかった（消された）ファイルを除き、そのパスを返す
+func (m *Manifest) RemoveUntouched() []string {
+	var removed []string
+	for path, c := range m.Contents {
+		if !c.Touched {
+			delete(m.Contents, path)
+			removed = append(removed, path)
 		}
 	}
-	m.Contents = newContents
+	sort.Strings(removed)
+	return removed
 }
 
 // Dump は、Manifestの内容を形式 v2 で書き出す。signer があれば署名を付ける
@@ -244,13 +224,4 @@ func (m *Manifest) DataHashes() []string {
 		}
 	}
 	return hashes
-}
-
-func (m *Manifest) GetAttribute(path string) ContentAttribute {
-	var attr = DefaultContentAttribute()
-	// TODO: とりあえずフィルタを固定している
-	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" || filepath.Ext(path) == ".pbx" || filepath.Ext(path) == ".mp4" {
-		attr = ContentAttribute(0)
-	}
-	return attr
 }

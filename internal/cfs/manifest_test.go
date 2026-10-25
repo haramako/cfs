@@ -13,14 +13,22 @@ import (
 var Printf = fmt.Printf // avoid error
 var timeCount = int64(0)
 
+// mainTestConfig は、このファイルの結合テストで使う設定
+var mainTestConfig *Config
+
 func TestMain(m *testing.M) {
-	Option.EncryptKey = "12345678901234567890123456789012"
-
-	if os.Getenv("CFS_TEST_VERBOSE") != "" {
-		Verbose = true
+	cacheDir, err := os.MkdirTemp("", "cfs-cache")
+	if err != nil {
+		panic(err)
 	}
+	mainTestConfig = DefaultConfig()
+	mainTestConfig.EncryptKey = "12345678901234567890123456789012"
+	mainTestConfig.CacheDir = cacheDir
+	mainTestConfig.Verbose = os.Getenv("CFS_TEST_VERBOSE") != ""
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.RemoveAll(cacheDir)
+	os.Exit(code)
 }
 
 func setupManifest() (*Client, *Manifest, string) {
@@ -31,7 +39,7 @@ func setupManifest() (*Client, *Manifest, string) {
 		panic(err)
 	}
 
-	manifest, err := ManifestFromFile(filepath.FromSlash(dir + "/.manifest"))
+	manifest, err := ManifestFromFile(filepath.FromSlash(dir+"/.manifest"), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -41,6 +49,7 @@ func setupManifest() (*Client, *Manifest, string) {
 	client := &Client{
 		Manifest: manifest,
 		Storage:  storage,
+		Config:   mainTestConfig,
 	}
 	client.Init()
 
@@ -68,7 +77,7 @@ func newStorage(manifest *Manifest) Storage {
 		uri = "file:///" + tempDir + "/"
 	}
 
-	storage, err := StorageFromString(uri)
+	storage, err := OpenStorage(uri, mainTestConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -89,7 +98,7 @@ func setupManifestWithFiles() (*Client, *Manifest, string) {
 }
 
 func setupManifestFromCabinet(cabinet string, location string) (*Downloader, *Manifest) {
-	downloader, err := NewDownloader(cabinet)
+	downloader, err := NewDownloader(cabinet, mainTestConfig)
 	if err != nil {
 		panic(err)
 	}

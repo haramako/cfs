@@ -22,12 +22,11 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 | `crypt.go` / `signing.go` | 暗号化（AES-256-CTR、鍵の導出、鍵 ID）とマニフェストの署名（Ed25519） |
 | `gc.go` | GC、タグの一覧・削除、キャビネットの設定（`config.json`） |
 | `fetcher.go` / `location.go` | 読み込み口（ファイル・HTTP）と、URL・パスの判定 |
-| `option.go` | プロジェクト単位の設定 `.cfsenv`（JSON）→ グローバル変数 `Option` |
-| `config.go` | ユーザー単位の設定 `~/.cfs_setting`（YAML）とキャッシュディレクトリ（`~/.cfs/…`） |
+| `config.go` | 設定 `Config`（`.cfsenv` の JSON と環境変数）、キャッシュの場所、`Logger`。グローバル変数ではなく引数で渡す |
 | `internal/pack/` | 独自バイナリ形式のパックファイル（`TP` 形式）。詳細は [pack-format.md](pack-format.md) |
 | `cmd/cfs/` | CLI（urfave/cli v3）。コマンド一覧は [cli-and-configuration.md](cli-and-configuration.md) |
 
-主な外部依存: S3 は aws-sdk-go-v2、YAML は go.yaml.in/yaml/v3、atomic な書き込みに natefinch/atomic。
+主な外部依存: S3 は aws-sdk-go-v2、atomic な書き込みに natefinch/atomic、並列処理に golang.org/x/sync/errgroup。
 
 ## 書き込みと読み込みの非対称性
 
@@ -40,7 +39,7 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 
 ## アップロードの流れ（`cfs upload`）
 
-1. `.cfsenv` を読み、ローカルのマニフェストのキャッシュ（前回アップロード時のマニフェスト）を `~/.cfs/cache/<md5>` からロード。`.hash` のハッシュで `manifest/` にまだあるかを 1 回確かめ（`ValidateCache`）、なければキャッシュを捨てる
+1. `.cfsenv` を読み、ローカルのマニフェストのキャッシュ（前回アップロード時のマニフェスト）を 手元のキャッシュの `manifest/<sha256>` からロード。`.hash` のハッシュで `manifest/` にまだあるかを 1 回確かめ（`ValidateCache`）、なければキャッシュを捨てる
 2. `Client.AddFiles` で対象ディレクトリを走査（除外ルールは [known-issues-and-gotchas.md](known-issues-and-gotchas.md) 参照）
 3. `Client.AddFile` で変更検出
    - 前回の `Time + 1秒` 以前の mtime かつサイズ一致 → 読まずにスキップ
@@ -48,14 +47,14 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
    - それ以外 → `encode`（圧縮→暗号化）してキューに積む
 4. 32 並列の `uploadWorker` が `Storage.Put(data/..., overwrite=false)` を呼ぶ（既にあればバックエンド側でスキップ。0 バイトは置かない）
 5. `RemoveUntouched` で今回見つからなかったエントリを削除（マニフェスト＝ディレクトリの完全なスナップショット）
-6. `Client.Finish` → `UploadManifest`: マニフェスト（署名の鍵があれば署名付き）をエンコードして `manifest/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
+6. `Client.Finish`: アップロードの完了を待ち、失敗したものがあればマニフェストを置かずにエラーを返す。成功なら `UploadManifest`: マニフェスト（署名の鍵があれば署名付き）をエンコードして `manifest/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
 
 ## ダウンロードの流れ（`cfs sync`）
 
 1. `location` が 64 桁 hex ならマニフェストハッシュ、そうでなければタグ名として `tag/<name>` を GET してハッシュを得る
-2. マニフェスト本体を `Fetch`（`DefaultContentAttribute()` でデコード）→ TSV をパース
+2. マニフェスト本体を取得し、`decodeManifest` で圧縮・暗号化をデータから判断して戻す → TSV をパース（`VerifyKeys` があれば署名を確かめる）
 3. 必要なら `--filter-cmd` でファイルを絞り込む
-4. 各 `Content` を `Fetch`。`~/.cfs/datacache/<hash>` にあればそれを使い、なければダウンロードしてキャッシュ（キャッシュはエンコード済みのまま保存）→ デコードして出力先に atomic write
+4. 各 `Content` を 8 並列で `Fetch`（失敗したら 3 回までやり直す）。手元のキャッシュの `data/<hash>` にあればそれを使い、なければダウンロードしてキャッシュ（キャッシュはエンコード済みのまま保存）→ デコードして出力先に atomic write
 
 更新がなければ、タグ（32 バイトのハッシュ）とマニフェストの取得だけで終わる、というのが速度面の売り。
 

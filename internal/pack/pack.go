@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/haramako/cfs/internal/cfs"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -174,38 +173,17 @@ func NewPackFileFromDir(dir string) (*PackFile, error) {
 	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
 }
 
-// Patch パッチを作成する
+// Patch は、base から current への差分（増えたものと変わったもの）のパックを作る。消えたものは表現しない
 func Patch(base, current *PackFile) (*PackFile, error) {
-	// Make base entries map by path.
-	baseEntryMap := map[string]Entry{}
+	baseHashes := map[string]string{}
 	for _, e := range base.Entries {
-		baseEntryMap[e.Path] = e
+		baseHashes[e.Path] = e.Hash
 	}
 
-	// Make diff from base to current.
 	entries := []Entry{}
 	for _, e := range current.Entries {
-		baseEntry, found := baseEntryMap[e.Path]
-		same := false
-		if found {
-			//fmt.Printf("%v %v %v\n", e.Path, e.Hash, baseEntry.Hash)
-			if baseEntry.Hash == e.Hash {
-				same = true
-			} else {
-				if cfs.Verbose {
-					fmt.Printf("not same file path:%v, base-hash:%v, current-hash:%v\n", e.Path, baseEntry.Hash, e.Hash)
-				}
-			}
-		} else {
-			if cfs.Verbose {
-				fmt.Printf("new file %v\n", e.Path)
-			}
-		}
-
-		if !same {
+		if hash, found := baseHashes[e.Path]; !found || hash != e.Hash {
 			entries = append(entries, e)
-		} else {
-			//fmt.Printf("same %v\n", e.Path)
 		}
 	}
 

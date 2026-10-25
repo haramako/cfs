@@ -48,10 +48,6 @@ func (s *DummyStorage) Put(key string, body []byte, overwrite bool) error {
 		return nil
 	}
 	s.objects[key] = dummyObject{body: append([]byte(nil), body...), lastModified: s.now()}
-
-	if Verbose {
-		fmt.Printf("uploading '%s'\n", key)
-	}
 	return nil
 }
 

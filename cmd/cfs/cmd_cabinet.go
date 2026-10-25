@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/haramako/cfs/internal/cfs"
@@ -12,12 +11,17 @@ import (
 
 // キャビネットの管理（GC、タグ、キャビネットの設定、署名の鍵）のコマンド
 
-func openCabinet() (cfs.Storage, cfs.Fetcher) {
-	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-	check(err)
-	fetcher, err := cfs.NewFetcher(cfs.Option.Cabinet)
-	check(err)
-	return storage, fetcher
+// openCabinet は、設定のキャビネットの書き込み口と読み込み口を開く
+func openCabinet(cfg *cfs.Config) (cfs.Storage, cfs.Fetcher, error) {
+	storage, err := cfs.OpenStorage(cfg.Cabinet, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	fetcher, err := cfs.OpenFetcher(cfg.Cabinet, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return storage, fetcher, nil
 }
 
 var gcCommand = &cli.Command{
@@ -37,23 +41,29 @@ var gcCommand = &cli.Command{
 }
 
 func doGC(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	opt := cfs.GCOptions{DryRun: c.Bool("dry-run")}
-	if r := c.String("retention"); r != "" {
-		d, err := cfs.ParseDuration(r)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		opt.Retention = d
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	keys, err := cfg.KeyRing()
+	if err != nil {
+		return err
 	}
 
-	storage, fetcher := openCabinet()
+	opt := cfs.GCOptions{DryRun: c.Bool("dry-run"), Keys: keys, Log: cfg.Logger()}
+	if r := c.String("retention"); r != "" {
+		if opt.Retention, err = cfs.ParseDuration(r); err != nil {
+			return err
+		}
+	}
+
+	storage, fetcher, err := openCabinet(cfg)
+	if err != nil {
+		return err
+	}
 	result, err := cfs.RunGC(storage, fetcher, opt)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	fmt.Printf("retention: %v\n", result.Retention)
@@ -67,7 +77,7 @@ func doGC(_ context.Context, c *cli.Command) error {
 		verb = "would delete"
 	}
 	fmt.Printf("%s: %d (%d bytes)\n", verb, len(result.Deleted), result.DeletedBytes)
-	if cfs.Verbose || opt.DryRun {
+	if cfg.Verbose || opt.DryRun {
 		for _, k := range result.Deleted {
 			fmt.Printf("  %s\n", k)
 		}
@@ -94,10 +104,18 @@ var tagCommand = &cli.Command{
 }
 
 func doTagLs(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-	storage, fetcher := openCabinet()
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	storage, fetcher, err := openCabinet(cfg)
+	if err != nil {
+		return err
+	}
 	tags, err := cfs.ListTags(storage, fetcher)
-	check(err)
+	if err != nil {
+		return err
+	}
 	for _, t := range tags {
 		fmt.Printf("%s\t%s\t%s\n", t.Name, t.Hash, t.LastModified.Format(time.RFC3339))
 	}
@@ -105,18 +123,19 @@ func doTagLs(_ context.Context, c *cli.Command) error {
 }
 
 func doTagRm(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-	args := c.Args().Slice()
-	if len(args) == 0 {
-		fmt.Println("need at least 1 argument")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
 	}
-	storage, _ := openCabinet()
-	if err := cfs.DeleteTags(storage, args); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	args, err := needArgs(c, 1, -1)
+	if err != nil {
+		return err
 	}
-	return nil
+	storage, _, err := openCabinet(cfg)
+	if err != nil {
+		return err
+	}
+	return cfs.DeleteTags(storage, args)
 }
 
 var cabinetCommand = &cli.Command{
@@ -165,56 +184,73 @@ var cabinetCommand = &cli.Command{
 }
 
 func doCabinetConfig(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-	_, fetcher := openCabinet()
-	cfg, err := cfs.LoadCabinetConfig(fetcher)
-	check(err)
-	retention, err := cfg.RetentionDuration()
-	check(err)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	_, fetcher, err := openCabinet(cfg)
+	if err != nil {
+		return err
+	}
+	cabinetCfg, err := cfs.LoadCabinetConfig(fetcher)
+	if err != nil {
+		return err
+	}
+	retention, err := cabinetCfg.RetentionDuration()
+	if err != nil {
+		return err
+	}
 	fmt.Printf("retention: %v\n", retention)
 	return nil
 }
 
 func doCabinetConfigSet(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-	args := c.Args().Slice()
-	if len(args) != 2 {
-		fmt.Println("need just 2 arguments")
-		os.Exit(1)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
 	}
-	storage, fetcher := openCabinet()
-	cfg, err := cfs.LoadCabinetConfig(fetcher)
-	check(err)
+	args, err := needArgs(c, 2, 2)
+	if err != nil {
+		return err
+	}
+	storage, fetcher, err := openCabinet(cfg)
+	if err != nil {
+		return err
+	}
+	cabinetCfg, err := cfs.LoadCabinetConfig(fetcher)
+	if err != nil {
+		return err
+	}
 	switch args[0] {
 	case "retention":
-		cfg.Retention = args[1]
+		cabinetCfg.Retention = args[1]
 	default:
-		fmt.Printf("unknown cabinet config key %q\n", args[0])
-		os.Exit(1)
+		return fmt.Errorf("unknown cabinet config key %q", args[0])
 	}
-	if err := cfs.SaveCabinetConfig(storage, cfg); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	return nil
+	return cfs.SaveCabinetConfig(storage, cabinetCfg)
 }
 
 func doCabinetInit(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
 	opt := cfs.InitOptions{
 		Region:    c.String("region"),
 		Retention: c.String("retention"),
 		DryRun:    c.Bool("dry-run"),
 	}
-	steps, err := cfs.InitCabinet(cfs.Option.Cabinet, opt)
+	if opt.Region == "" {
+		opt.Region = cfg.S3Region
+	}
+	steps, err := cfs.InitCabinet(cfg.Cabinet, opt)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if opt.DryRun {
-		fmt.Printf("would init cabinet %s:\n", cfs.Option.Cabinet)
+		fmt.Printf("would init cabinet %s:\n", cfg.Cabinet)
 	} else {
-		fmt.Printf("init cabinet %s:\n", cfs.Option.Cabinet)
+		fmt.Printf("init cabinet %s:\n", cfg.Cabinet)
 	}
 	for _, s := range steps {
 		fmt.Printf("  %s\n", s)
@@ -223,16 +259,17 @@ func doCabinetInit(_ context.Context, c *cli.Command) error {
 }
 
 func doCabinetPolicy(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-	args := c.Args().Slice()
-	if len(args) != 1 {
-		fmt.Println("need just 1 argument (upload, download, gc, admin)")
-		os.Exit(1)
-	}
-	policy, err := cfs.IAMPolicy(cfs.Option.Cabinet, args[0])
+	cfg, err := loadConfig(c)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
+	}
+	args, err := needArgs(c, 1, 1)
+	if err != nil {
+		return err
+	}
+	policy, err := cfs.IAMPolicy(cfg.Cabinet, args[0])
+	if err != nil {
+		return err
 	}
 	fmt.Println(string(policy))
 	return nil
@@ -246,7 +283,9 @@ var keygenCommand = &cli.Command{
 
 func doKeygen(_ context.Context, c *cli.Command) error {
 	private, public, err := cfs.GenerateSigningKey()
-	check(err)
+	if err != nil {
+		return err
+	}
 	fmt.Println("# Signing key: set to CFS_SIGNING_KEY on the uploading side. Keep it secret.")
 	fmt.Printf("CFS_SIGNING_KEY=%s\n", private)
 	fmt.Println("# Verify key: add to VerifyKeys in .cfsenv on the downloading side.")

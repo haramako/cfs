@@ -6,18 +6,29 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/haramako/cfs/internal/cfs"
 )
 
 // TestMain は、CFS_TEST_FILTER が設定されていれば、--filter-cmd に渡すフィルターとして動く
-// （標準入力のパスのうち、その文字列を含むものだけを出力する）
+// （標準入力のパスのうち、その文字列を含むものだけを出力する）。
+// CFS_TEST_MAIN が設定されていれば、"--" の後の引数で cfs の main を動かす
 func TestMain(m *testing.M) {
+	if os.Getenv("CFS_TEST_MAIN") != "" {
+		for i, arg := range os.Args {
+			if arg == "--" {
+				os.Args = append([]string{"cfs"}, os.Args[i+1:]...)
+				break
+			}
+		}
+		main()
+		os.Exit(0)
+	}
 	if pattern := os.Getenv("CFS_TEST_FILTER"); pattern != "" {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -39,8 +50,7 @@ type cliTest struct {
 
 func newCLITest(t *testing.T) *cliTest {
 	t.Helper()
-	t.Setenv("USERPROFILE", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CFS_CACHE_DIR", t.TempDir())
 	t.Setenv("CFS_ENCRYPT_KEY", "cli-test-key-1234567890")
 	t.Setenv("CFS_OLD_ENCRYPT_KEYS", "")
 	t.Setenv("CFS_SIGNING_KEY", "")
@@ -51,9 +61,6 @@ func newCLITest(t *testing.T) *cliTest {
 
 // tryRun は、cfs を引数で実行し、標準出力とエラー（panic を含む）を返す
 func (c *cliTest) tryRun(args ...string) (out string, err error) {
-	saved := *cfs.Option
-	defer func() { *cfs.Option = saved }()
-
 	r, w, perr := os.Pipe()
 	if perr != nil {
 		c.t.Fatal(perr)
@@ -327,9 +334,8 @@ func TestCLIFilterCmd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(exe, " ") {
-		t.Skip("--filter-cmd splits the command by spaces")
-	}
+	// パスに空白があっても、引用符で囲めば渡せる
+	exe = `"` + exe + `"`
 	t.Setenv("CFS_TEST_FILTER", "keep")
 	want := map[string]string{"keep-a.txt": "a", "sub/keep-c.txt": "c"}
 
@@ -349,5 +355,116 @@ func TestCLIFilterCmd(t *testing.T) {
 	c.run("--filter-cmd", exe, "pack", "filtered-dir.tp", "src")
 	if got := lsPaths(c.run("unpack", "filtered-dir.tp")); got != "keep-a.txt,sub/keep-c.txt" {
 		t.Errorf("filtered pack = %s", got)
+	}
+}
+
+func TestCLIErrors(t *testing.T) {
+	c := newCLITest(t)
+	c.write(map[string]string{"src/a.txt": "a"})
+	c.run("-c", c.cabinet, "cabinet", "init")
+	c.run("-c", c.cabinet, "upload", "-t", "v1", "src")
+
+	for _, tc := range []struct {
+		args   []string
+		expect string
+	}{
+		{[]string{"-c", c.cabinet, "sync", "v1"}, "usage: cfs sync location output-dir"},
+		{[]string{"-c", c.cabinet, "cat", "v1", "none.txt"}, "not found"},
+		{[]string{"-c", c.cabinet, "cat", "none", "a.txt"}, "not found"},
+		{[]string{"-c", c.cabinet, "upload", "-t", "../bad", "src"}, "invalid tag name"},
+		{[]string{"-c", c.cabinet, "merge", "../bad", "v1"}, "invalid tag name"},
+		{[]string{"-c", c.cabinet, "cabinet", "config", "set", "unknown", "x"}, "unknown cabinet config key"},
+		{[]string{"-c", c.cabinet, "gc", "--retention", "bad"}, "invalid"},
+		{[]string{"ls", "v1"}, "no cabinet"},
+		{[]string{"-c", "s3:", "upload", "src"}, ""},
+		{[]string{"unpack", "none.tp"}, ""},
+		{[]string{"-c", c.cabinet, "--filter-cmd", "cfs-no-such-command", "sync", "v1", "out"}, "filter command"},
+		{[]string{"-c", c.cabinet, "--filter-cmd", `"unclosed`, "sync", "v1", "out"}, "unclosed quote"},
+	} {
+		out, err := c.tryRun(tc.args...)
+		if err == nil {
+			t.Errorf("cfs %v must fail: %s", tc.args, out)
+			continue
+		}
+		if strings.HasPrefix(err.Error(), "panic") || !strings.Contains(err.Error(), tc.expect) {
+			t.Errorf("cfs %v: unexpected error %v", tc.args, err)
+		}
+	}
+
+	// 読めない .cfsenv は失敗にする
+	c.write(map[string]string{".cfsenv": "{broken"})
+	if _, err := c.tryRun("config"); err == nil || !strings.Contains(err.Error(), ".cfsenv") {
+		t.Errorf("broken .cfsenv must be an error, but %v", err)
+	}
+}
+
+func TestCLIVerifyReportsMissingData(t *testing.T) {
+	c := newCLITest(t)
+	c.write(map[string]string{"src/a.txt": "verify a", "src/b.txt": "verify b"})
+	c.run("-c", c.cabinet, "cabinet", "init")
+	c.run("-c", c.cabinet, "upload", "-t", "v1", "src")
+
+	// キャビネットのデータを 1 つ消すと、ls --verify が ng を出して失敗する
+	data := c.readTree(filepath.Join(c.cabinet, "data"))
+	for path := range data {
+		os.Remove(filepath.Join(c.dir, c.cabinet, "data", filepath.FromSlash(path)))
+		break
+	}
+	out, err := c.tryRun("-c", c.cabinet, "ls", "--verify", "v1")
+	if err == nil || !strings.Contains(err.Error(), "1 files are missing") || !strings.Contains(out, "\tng") {
+		t.Errorf("verify must report missing data: %v\n%s", err, out)
+	}
+}
+
+func TestMainExitCode(t *testing.T) {
+	c := newCLITest(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) (string, string, int) {
+		cmd := exec.Command(exe, append([]string{"--"}, args...)...)
+		cmd.Env = append(os.Environ(), "CFS_TEST_MAIN=1")
+		cmd.Dir = c.dir
+		var stdout, stderr strings.Builder
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		err := cmd.Run()
+		code := 0
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			code = exitErr.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return stdout.String(), stderr.String(), code
+	}
+
+	// 失敗したら、標準エラーにエラーを出して、終了コード 1 で終わる
+	stdout, stderr, code := run("-c", "cabinet", "cat", "none", "a.txt")
+	if code != 1 || !strings.Contains(stderr, "error:") || strings.Contains(stdout, "error:") {
+		t.Errorf("failure must exit 1 with an error on stderr: code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if _, _, code := run("keygen"); code != 0 {
+		t.Errorf("success must exit 0 but %d", code)
+	}
+}
+
+func TestSplitCommand(t *testing.T) {
+	for input, expect := range map[string]string{
+		"grep -v foo":                  "grep|-v|foo",
+		`  "C:/Program Files/x.exe"  a `: "C:/Program Files/x.exe|a",
+		`filter 'a b' "c d"e`:          "filter|a b|c de",
+		`cmd ""`:                       "cmd|",
+	} {
+		args, err := splitCommand(input)
+		if err != nil {
+			t.Errorf("splitCommand(%q): %v", input, err)
+			continue
+		}
+		if got := strings.Join(args, "|"); got != expect {
+			t.Errorf("splitCommand(%q) = %q, want %q", input, got, expect)
+		}
+	}
+	if _, err := splitCommand(`a "b`); err == nil {
+		t.Errorf("unclosed quote must be an error")
 	}
 }

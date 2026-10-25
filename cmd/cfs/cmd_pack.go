@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/haramako/cfs/internal/pack"
@@ -13,37 +12,34 @@ var packCommand = &cli.Command{
 	Name:      "pack",
 	Usage:     "pack specified dir",
 	Action:    doPack,
-	ArgsUsage: "packfile.cfspack dir [...]",
+	ArgsUsage: "packfile.cfspack dir",
 }
 
 func doPack(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	var args = c.Args().Slice()
-	if len(args) != 2 {
-		fmt.Println("need just 2 arguments")
-		os.Exit(1)
+	args, err := needArgs(c, 2, 2)
+	if err != nil {
+		return err
 	}
 
-	filter := c.String("filter-cmd")
-
-	packfile := args[0]
-
-	dir := args[1]
-
-	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-	defer w.Close()
-	check(err)
-
-	pak, err := pack.NewPackFileFromDir(dir)
-	check(err)
-
-	if filter != "" {
-		pak, err = filterPackFile(filter, pak)
-		check(err)
+	pak, err := pack.NewPackFileFromDir(args[1])
+	if err != nil {
+		return err
 	}
+	if pak, err = filterPackFile(c.String("filter-cmd"), pak); err != nil {
+		return err
+	}
+	return writePackFile(args[0], pak)
+}
 
-	err = pack.Pack(w, pak, nil)
-	check(err)
-	return nil
+// writePackFile は、パックをファイルに書く
+func writePackFile(path string, pak *pack.PackFile) error {
+	w, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := pack.Pack(w, pak, nil); err != nil {
+		w.Close()
+		return err
+	}
+	return w.Close()
 }

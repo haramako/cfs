@@ -45,10 +45,14 @@ var serveCommand = &cli.Command{
 }
 
 func doServe(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
-
-	downloader, err := cfs.NewDownloader(getDownloaderURL())
-	check(err)
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+	downloader, err := openDownloader(cfg)
+	if err != nil {
+		return err
+	}
 
 	s := newServer(downloader, c.Duration("tag-ttl"))
 	server := &http.Server{

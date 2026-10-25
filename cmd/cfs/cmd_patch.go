@@ -16,45 +16,39 @@ var patchCommand = &cli.Command{
 	ArgsUsage: "base.tp current.tp output.tp",
 }
 
-func doPatch(_ context.Context, c *cli.Command) error {
-	loadConfig(c)
+// readPackFile は、パックのファイルを読む（中身も読む）
+func readPackFile(path string) (*pack.PackFile, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return pack.Parse(f)
+}
 
-	var args = c.Args().Slice()
-	if len(args) != 3 {
-		fmt.Println("need just 3 arguments")
-		os.Exit(1)
+func doPatch(_ context.Context, c *cli.Command) error {
+	args, err := needArgs(c, 3, 3)
+	if err != nil {
+		return err
 	}
 
-	basepath := args[0]
-	currentpath := args[1]
-	packfile := args[2]
+	base, err := readPackFile(args[0])
+	if err != nil {
+		return err
+	}
+	current, err := readPackFile(args[1])
+	if err != nil {
+		return err
+	}
 
-	// Read base pack
-	basefile, err := os.Open(basepath)
-	check(err)
-	defer basefile.Close()
-
-	basepack, err := pack.Parse(basefile)
-	check(err)
-
-	// Read current pack
-	currentfile, err := os.Open(currentpath)
-	check(err)
-	defer currentfile.Close()
-
-	currentpack, err := pack.Parse(currentfile)
-	check(err)
-
-	// Calculate diff
-	patch, err := pack.Patch(basepack, currentpack)
-	check(err)
-
-	// Make patch pack
-	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-	defer w.Close()
-	check(err)
-
-	err = pack.Pack(w, patch, nil)
-	check(err)
-	return nil
+	patch, err := pack.Patch(base, current)
+	if err != nil {
+		return err
+	}
+	if c.Bool("verbose") {
+		for _, e := range patch.Entries {
+			fmt.Printf("changed %s\n", e.Path)
+		}
+	}
+	return writePackFile(args[2], patch)
 }

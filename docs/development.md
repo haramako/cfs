@@ -30,7 +30,7 @@ Agent/            AI エージェント向けの作業メモ（wiki、経緯ロ�
 | `crypt.go` / `signing.go` | 暗号化（鍵の導出、鍵 ID）と、マニフェストの署名 |
 | `gc.go` | GC、タグの一覧と削除、キャビネットの設定 |
 | `util.go` | ハッシュ、キャビネット上の場所、圧縮と暗号化の組み合わせ |
-| `option.go` / `config.go` | `.cfsenv` と `~/.cfs_setting` の読み込み |
+| `config.go` | 設定（`Config`）。`.cfsenv` と環境変数の読み込み、キャッシュの場所。設定はグローバル変数ではなく、`Client` や `Downloader` などに引数で渡します |
 
 ## ビルド
 

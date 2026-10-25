@@ -23,14 +23,16 @@ type S3Storage struct {
 	BucketName string
 	Region     string
 	client     *s3.Client
+	log        Logger
 }
 
-func NewS3Storage(bucketName string) (*S3Storage, error) {
-	return newS3Storage(bucketName)
+// NewS3Storage は、バケットを開く。region が空なら、バケットから自動で判定する
+func NewS3Storage(bucketName string, region string, log Logger) (*S3Storage, error) {
+	return newS3Storage(bucketName, region, log)
 }
 
 // optFns はテストでエンドポイントを差し替えるために使う
-func newS3Storage(bucketName string, optFns ...func(*s3.Options)) (*S3Storage, error) {
+func newS3Storage(bucketName string, region string, log Logger, optFns ...func(*s3.Options)) (*S3Storage, error) {
 	ctx := context.Background()
 
 	// 単純な PutObject にするため、チェックサムは必要な場合だけ付ける（取得時の検証もしない。
@@ -44,7 +46,6 @@ func newS3Storage(bucketName string, optFns ...func(*s3.Options)) (*S3Storage, e
 	}
 
 	// リージョンは .cfsenv の S3Region → バケットから自動判定 → AWS 標準の設定 → 既定値 の順に決める
-	region := Option.S3Region
 	if region == "" {
 		region = detectBucketRegion(ctx, cfg, bucketName, optFns)
 	}
@@ -54,13 +55,11 @@ func newS3Storage(bucketName string, optFns ...func(*s3.Options)) (*S3Storage, e
 	if region == "" {
 		region = DefaultS3Region
 	}
-	if Verbose {
-		fmt.Printf("using S3 bucket '%s' in region '%s'\n", bucketName, region)
-	}
+	log.Printf("using S3 bucket '%s' in region '%s'\n", bucketName, region)
 
 	client := s3.NewFromConfig(cfg, append([]func(*s3.Options){func(o *s3.Options) { o.Region = region }}, optFns...)...)
 
-	return &S3Storage{BucketName: bucketName, Region: region, client: client}, nil
+	return &S3Storage{BucketName: bucketName, Region: region, client: client, log: log}, nil
 }
 
 // detectBucketRegion は、バケットのリージョンを HeadBucket の x-amz-bucket-region から調べる。
@@ -116,9 +115,7 @@ func (s *S3Storage) Put(key string, body []byte, overwrite bool) error {
 	if err != nil {
 		return err
 	}
-	if Verbose {
-		fmt.Printf("uploading '%s'\n", key)
-	}
+	s.log.Printf("uploading '%s'\n", key)
 	return nil
 }
 

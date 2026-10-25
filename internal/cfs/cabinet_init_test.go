@@ -122,7 +122,7 @@ func TestCabinetFormatCheck(t *testing.T) {
 	uploadTo(t, s, "v1", map[string]string{"a.txt": "a"})
 	s.Put(cabinetConfigKey, []byte(`{"format": 3}`), true)
 
-	d := &Downloader{fetcher: s}
+	d := openTestDownloader(t, s, nil)
 	if _, err := d.LoadManifest("v1"); err == nil || !strings.Contains(err.Error(), "unsupported cabinet format") {
 		t.Errorf("newer cabinet format must be rejected, but %v", err)
 	}
@@ -135,7 +135,7 @@ func TestCabinetFormatCheck(t *testing.T) {
 
 	// 版が書かれていない（init を使わずに作った）キャビネットは読める
 	s.Put(cabinetConfigKey, []byte(`{"retention": "1d"}`), true)
-	if _, err := (&Downloader{fetcher: s}).LoadManifest("v1"); err != nil {
+	if _, err := openTestDownloader(t, s, nil).LoadManifest("v1"); err != nil {
 		t.Errorf("cabinet without format must be readable: %v", err)
 	}
 }

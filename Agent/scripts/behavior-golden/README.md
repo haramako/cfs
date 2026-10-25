@@ -21,7 +21,7 @@ diff /tmp/old.txt /tmp/new.txt
 
 - Git Bash（`cygpath`, `touch -d`, `md5sum`, `curl`, `grep`）と Go
 - ポート 18764（キャビネット配信用の `static-server/`）と 18765（`cfs serve`）が空いていること
-- ホームディレクトリは作業ディレクトリ内の `home/` に差し替えるので、実際の `~/.cfs` は汚さない
+- ホームディレクトリと `CFS_CACHE_DIR` は作業ディレクトリ内の `home/` に差し替えるので、実際のキャッシュは汚さない
 
 ## 記録する内容
 
