@@ -29,8 +29,8 @@ CFS の設定は2種類あります。
 | `Url` | （空） | ダウンロード元。URL か手元のパス。空ならキャビネットから直接読みます（[ストレージ](storage-backends.md) を参照） |
 | `S3Region` | （空） | S3 のリージョン。空ならバケットから自動で調べます（[ストレージ](storage-backends.md#リージョン) を参照） |
 | `Compress` | `true` | zlib で圧縮するか |
-| `EncryptKey` | （空） | AES の鍵。16、24、32 バイトのどれか。空なら暗号化しません |
-| `EncryptIv` | （空） | AES の IV。16 バイト |
+| `EncryptKey` | （空） | AES の鍵。16、24、32 バイトのどれか。空なら暗号化しません。環境変数 `CFS_ENCRYPT_KEY` があればそちらが優先されます |
+| `EncryptIv` | （空） | AES の IV。16 バイト。環境変数 `CFS_ENCRYPT_IV` があればそちらが優先されます |
 | `Recursive` | `true` | サブフォルダも対象にするか |
 | `Flatten` | `false` | `true` にすると、フォルダ構成を捨ててファイル名だけで管理します |
 | `NoCache` | `false` | `true` にすると、`--force` と同じく手元のキャッシュを使わずに全ファイルを調べ直します |
@@ -46,7 +46,7 @@ CFS の設定は2種類あります。
 
 **ダウンロードする側も、アップロードした側と同じ `Compress`、`EncryptKey`、`EncryptIv` が必要です。** ファイル一覧自体が、これらの設定で圧縮・暗号化されているためです。
 
-> `EncryptKey` と `EncryptIv` は秘密にしたい情報です。`.cfsenv` をリポジトリにコミットする場合は、そのリポジトリを誰が読めるかに注意してください。
+
 
 ## `~/.cfs_setting`
 

@@ -56,12 +56,33 @@ func LoadDefaultOptions(configFile string) error {
 		if Option.Url, err = ResolveLocation(Option.Url, base); err != nil {
 			return fmt.Errorf("invalid Url in %s: %w", configFile, err)
 		}
-		if Verbose {
-			optionJson, _ := json.Marshal(Option)
-			fmt.Printf("option loaded as %s\n", optionJson)
-		}
+	}
+
+	// 暗号鍵は、リポジトリに置く .cfsenv ではなく環境変数から渡せる（環境変数が優先）
+	if key := os.Getenv("CFS_ENCRYPT_KEY"); key != "" {
+		Option.EncryptKey = key
+	}
+	if iv := os.Getenv("CFS_ENCRYPT_IV"); iv != "" {
+		Option.EncryptIv = iv
+	}
+
+	if Verbose {
+		fmt.Printf("option loaded as %s\n", Option.maskedJSON())
 	}
 	return nil
+}
+
+// maskedJSON は、暗号鍵を伏せた設定の JSON を返す（ログ用）
+func (o *OptionInfo) maskedJSON() []byte {
+	masked := *o
+	if masked.EncryptKey != "" {
+		masked.EncryptKey = "***"
+	}
+	if masked.EncryptIv != "" {
+		masked.EncryptIv = "***"
+	}
+	data, _ := json.Marshal(masked)
+	return data
 }
 
 func (o *OptionInfo) Parse(data []byte) error {

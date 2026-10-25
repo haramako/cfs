@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -109,6 +110,47 @@ func TestPathToFileURLRoundTrip(t *testing.T) {
 	}
 	if got != filepath.Clean(dir) {
 		t.Errorf("round trip of %q became %q (via %v)", dir, got, u)
+	}
+}
+
+func TestLoadDefaultOptionsEncryptKeyFromEnv(t *testing.T) {
+	saved := *Option
+	defer func() { *Option = saved }()
+
+	config := filepath.Join(t.TempDir(), ".cfsenv")
+	if err := os.WriteFile(config, []byte(`{"EncryptKey": "key-in-file-123456789012345678901", "EncryptIv": "iv-in-file-12345"}`), 0666); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CFS_ENCRYPT_KEY", "")
+	t.Setenv("CFS_ENCRYPT_IV", "")
+	if err := LoadDefaultOptions(config); err != nil {
+		t.Fatal(err)
+	}
+	if Option.EncryptKey != "key-in-file-123456789012345678901" {
+		t.Errorf("EncryptKey must come from .cfsenv but %q", Option.EncryptKey)
+	}
+
+	t.Setenv("CFS_ENCRYPT_KEY", "key-in-env-1234567890123456789012")
+	t.Setenv("CFS_ENCRYPT_IV", "iv-in-env-123456")
+	if err := LoadDefaultOptions(config); err != nil {
+		t.Fatal(err)
+	}
+	if Option.EncryptKey != "key-in-env-1234567890123456789012" || Option.EncryptIv != "iv-in-env-123456" {
+		t.Errorf("environment variables must take precedence but %q / %q", Option.EncryptKey, Option.EncryptIv)
+	}
+
+	// .cfsenv がなくても環境変数は使われる
+	Option.EncryptKey = ""
+	if err := LoadDefaultOptions(filepath.Join(t.TempDir(), "none")); err != nil {
+		t.Fatal(err)
+	}
+	if Option.EncryptKey != "key-in-env-1234567890123456789012" {
+		t.Errorf("EncryptKey must come from environment without .cfsenv but %q", Option.EncryptKey)
+	}
+
+	if strings.Contains(string(Option.maskedJSON()), "key-in-env") {
+		t.Errorf("log must not contain the key: %s", Option.maskedJSON())
 	}
 }
 
