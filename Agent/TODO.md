@@ -10,6 +10,8 @@
 
 ## Items
 
+- [ ] S3 のリージョンを標準的に指定できるようにする（固定の `ap-northeast-1` をやめる）。計画は [discussions/2026-10-25-s3-region-plan.md](discussions/2026-10-25-s3-region-plan.md) (2026-10-25)
+- [ ] GCS（`gs://`）を実装から外す（当面はローカルと S3 だけ、後から足せる設計は保つ）。方針は [discussions/2026-10-25-storage-scope-file-and-s3-only.md](discussions/2026-10-25-storage-scope-file-and-s3-only.md) (2026-10-25)
 - [ ] Windows で `file://` のキャビネットから取得できない不具合を直す（修正方針で決定）。計画は [discussions/2026-10-25-fix-windows-file-download-plan.md](discussions/2026-10-25-fix-windows-file-download-plan.md) (2026-10-25)
 - [ ] 暗号化を改善する（ファイル一覧への署名、ファイルごとの IV など）。計画は [discussions/2026-10-25-encryption-improvement-plan.md](discussions/2026-10-25-encryption-improvement-plan.md)。`.ab` が無暗号なのは意図的（実行時の復号コストのため）と確認済み。A（署名）→ C（IV）の順 (2026-10-25)
 - [ ] 暗号鍵を環境変数（例: `CFS_ENCRYPT_KEY`）で上書きできるようにする。計画は [discussions/2026-10-25-encrypt-key-env-override-plan.md](discussions/2026-10-25-encrypt-key-env-override-plan.md) (2026-10-25)

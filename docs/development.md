@@ -79,7 +79,9 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-goreleaser が windows、darwin、linux（amd64）の実行ファイルを zip にまとめ、GitHub Releases に置きます。設定は `.goreleaser.yml` にあります。
+goreleaser が windows、darwin、linux（amd64）の実行ファイルを zip にまとめ、チェックサムのファイルと一緒に GitHub Releases に置きます。設定は `.goreleaser.yml` にあります。リリースの完成まで、数分かかります。
+
+`v0.2.0-rc.1` のように `-` の付いたバージョンは、GitHub でも**プレリリース**として公開されます。プレリリースは「Latest」にならないので、リリースの手順を試すときはこの形のタグを使ってください。
 
 ## ドキュメント
 

@@ -39,8 +39,9 @@ CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 ## CI / リリース（GitHub Actions）
 
 - `.github/workflows/ci.yml`: push / PR で ubuntu と windows の `go vet ./...` と `go test -v ./...`
-- `.github/workflows/release.yml`: `v*` タグで `go test` → goreleaser（`goreleaser-action@v6`, goreleaser v2）
-- `.goreleaser.yml` は `version: 2` 形式。3 OS × amd64 の zip（README 同梱）を GitHub Releases に出す。`main.revision` に短いコミットハッシュを埋め込む
+- `.github/workflows/release.yml`: `v*` タグで `go test` → goreleaser（`goreleaser-action@v7`, goreleaser v2）
+- `.goreleaser.yml` は `version: 2` 形式。3 OS × amd64 の zip（README 同梱）とチェックサムを GitHub Releases に出す。`main.revision` に短いコミットハッシュを埋め込む。`release.prerelease: auto` なので `-` 付きのタグ（`v0.0.0-test.1` など）はプレリリースになり、Latest を奪わない
+- 2026-10-25 に `v0.0.0-test.1` で動作確認済み（成功、約3分。zip は各約 13MB。GCS の依存を外せば小さくなるはず）。詳細は `../discussions/2026-10-25-release-workflow-check.md`
 - 旧 CircleCI（Go 1.14 イメージ、終了済みの `git.io` に依存）は 2026-10 に削除
 
 ## 歴史メモ
