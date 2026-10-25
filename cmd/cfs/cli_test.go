@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
 )
 
 // TestMain は、CFS_TEST_FILTER が設定されていれば、--filter-cmd に渡すフィルターとして動く
@@ -450,10 +449,10 @@ func TestMainExitCode(t *testing.T) {
 
 func TestSplitCommand(t *testing.T) {
 	for input, expect := range map[string]string{
-		"grep -v foo":                  "grep|-v|foo",
+		"grep -v foo":                    "grep|-v|foo",
 		`  "C:/Program Files/x.exe"  a `: "C:/Program Files/x.exe|a",
-		`filter 'a b' "c d"e`:          "filter|a b|c de",
-		`cmd ""`:                       "cmd|",
+		`filter 'a b' "c d"e`:            "filter|a b|c de",
+		`cmd ""`:                         "cmd|",
 	} {
 		args, err := splitCommand(input)
 		if err != nil {

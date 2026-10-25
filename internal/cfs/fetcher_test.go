@@ -76,7 +76,7 @@ func TestHttpFetcherError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	f, err := OpenFetcher(server.URL + "/", nil)
+	f, err := OpenFetcher(server.URL+"/", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
