@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/natefinch/atomic"
 )
@@ -16,6 +17,24 @@ import (
 // FileStorage は、手元のフォルダをキャビネットにする
 type FileStorage struct {
 	CabinetPath string // キャビネットのフォルダ（絶対パス）
+
+	mutex sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+func (s *FileStorage) lockKey(key string) func() {
+	s.mutex.Lock()
+	if s.locks == nil {
+		s.locks = map[string]*sync.Mutex{}
+	}
+	m, ok := s.locks[key]
+	if !ok {
+		m = &sync.Mutex{}
+		s.locks[key] = m
+	}
+	s.mutex.Unlock()
+	m.Lock()
+	return m.Unlock
 }
 
 // NewFileStorage は、手元のパスのフォルダをキャビネットにする
@@ -32,6 +51,10 @@ func (s *FileStorage) fullPath(key string) string {
 }
 
 func (s *FileStorage) Put(key string, body []byte, overwrite bool) error {
+	// 同じプロセスの中では、同じ場所への書き込みを順番にする
+	unlock := s.lockKey(key)
+	defer unlock()
+
 	file := s.fullPath(key)
 
 	// 同じ中身は同じ場所になるので、既にあれば書かない
@@ -45,9 +68,10 @@ func (s *FileStorage) Put(key string, body []byte, overwrite bool) error {
 		return err
 	}
 	if err := atomic.WriteFile(file, bytes.NewReader(body)); err != nil {
-		// 同じ中身を同時に書こうとして、相手が先に置いた場合（Windows では置き換えに失敗する）
+		// 同じ場所に別のプロセスが同時に書き、相手が先に置いた場合（Windows では置き換えに失敗する）。
+		// overwrite しない場所（data/ や manifest/）は中身で決まるので、置かれていれば同じ中身
 		if !overwrite {
-			if existing, rerr := os.ReadFile(file); rerr == nil && bytes.Equal(existing, body) {
+			if _, serr := os.Stat(file); serr == nil {
 				return nil
 			}
 		}
