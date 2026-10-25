@@ -17,3 +17,6 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+release:
+  # v0.2.0-rc.1 のようなプレリリース版のタグは、GitHub でもプレリリースとして公開する
+  prerelease: auto
