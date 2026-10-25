@@ -23,9 +23,13 @@ Agent/            AI エージェント向けの作業メモ（wiki、経緯ロ�
 | `manifest.go` | ファイル一覧（マニフェスト）と、その保存形式 |
 | `client.go` | アップロード（変更の検出、並列アップロード） |
 | `downloader.go` | ダウンロード（タグの解決、キャッシュ、並列取得） |
-| `storage.go` | ストレージの共通の形と、URL からの選択 |
-| `file_storage.go` / `s3_storage.go` | 各ストレージへの書き込み |
-| `util.go` | 圧縮と暗号化 |
+| `storage.go` | ストレージ（書き込み・一覧・削除）の共通の形と、URL からの選択 |
+| `fetcher.go` | ダウンロード元から読む口（ファイル、HTTP）|
+| `location.go` | URL と手元のパスの判定・変換 |
+| `file_storage.go` / `s3_storage.go` | 各ストレージ（S3 は読み込みとリージョンの判定も） |
+| `crypt.go` / `signing.go` | 暗号化（鍵の導出、鍵 ID）と、マニフェストの署名 |
+| `gc.go` | GC、タグの一覧と削除、キャビネットの設定 |
+| `util.go` | ハッシュ、キャビネット上の場所、圧縮と暗号化の組み合わせ |
 | `option.go` / `config.go` | `.cfsenv` と `~/.cfs_setting` の読み込み |
 
 ## ビルド

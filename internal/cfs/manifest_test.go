@@ -15,7 +15,6 @@ var timeCount = int64(0)
 
 func TestMain(m *testing.M) {
 	Option.EncryptKey = "12345678901234567890123456789012"
-	Option.EncryptIv = "1234567890123456"
 
 	if os.Getenv("CFS_TEST_VERBOSE") != "" {
 		Verbose = true
@@ -40,8 +39,8 @@ func setupManifest() (*Client, *Manifest, string) {
 	storage := newStorage(manifest)
 
 	client := &Client{
-		Manifest:  manifest,
-		Storage: storage,
+		Manifest: manifest,
+		Storage:  storage,
 	}
 	client.Init()
 

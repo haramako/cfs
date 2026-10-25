@@ -136,6 +136,20 @@ md5sum p1.tp pb1.tp patch.tp pf.tp >&3
 
 dump cabinet
 
+# タグ、キャビネットの設定、GC（更新日時は実行のたびに変わるので除く）
+echo "### tag ls" >&3
+"$CFS" tag ls 2>&1 | cut -f1,2 >&3
+run tag rm v2f
+run tag rm feature/foo
+run cabinet config
+run cabinet config set retention 1d
+run cabinet config
+run gc --dry-run
+run gc
+echo "### keygen lines" >&3
+"$CFS" keygen | grep -c '^CFS_SIGNING_KEY=\|"VerifyKeys"' >&3
+run upload -t feature/foo src
+
 # http サーバー
 "$CFS" http -p 18765 >http.log 2>&1 &
 HTTP_PID=$!

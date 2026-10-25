@@ -3,8 +3,8 @@ package cfs
 import (
 	"bytes"
 	"compress/zlib"
-	"crypto/aes"
-	"crypto/cipher"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 )
@@ -13,8 +13,17 @@ func isWindows() bool {
 	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
 }
 
+// HashLength は、ハッシュ（SHA-256 の 16 進表記）の文字数
+const HashLength = sha256.Size * 2
+
+// SumHash は、データのハッシュ（SHA-256 の 16 進表記）を返す
+func SumHash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
 func isHash(str string) bool {
-	if len(str) != 32 {
+	if len(str) != HashLength {
 		return false
 	}
 	for _, c := range str {
@@ -32,9 +41,24 @@ func hashPath(hash string) string {
 	return hash[0:2] + "/" + hash[2:]
 }
 
-func encode(origData []byte, encrypt_key string, encrypt_iv string, attr ContentAttribute) ([]byte, bool, error) {
+// dataKey は、中身のハッシュからキャビネット上の場所を返す
+func dataKey(hash string) string {
+	return "data/" + hashPath(hash)
+}
+
+// manifestKey は、マニフェストのハッシュからキャビネット上の場所を返す
+func manifestKey(hash string) string {
+	return "manifest/" + hashPath(hash)
+}
+
+// tagKey は、タグのキャビネット上の場所を返す
+func tagKey(tag string) string {
+	return "tag/" + tag
+}
+
+// encode は、属性に従って圧縮・暗号化したデータを返す（圧縮 → 暗号化の順）
+func encode(origData []byte, keys *KeyRing, attr ContentAttribute) ([]byte, error) {
 	data := origData
-	hash_changed := false
 
 	if attr.Compressed() {
 		var buf bytes.Buffer
@@ -42,35 +66,27 @@ func encode(origData []byte, encrypt_key string, encrypt_iv string, attr Content
 		w.Write(origData)
 		w.Close()
 		data = buf.Bytes()
-		hash_changed = true
 	}
 
 	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(Option.EncryptKey))
-		if err != nil {
-			return nil, false, err
-		}
-		cfb := cipher.NewCFBEncrypter(block, []byte(Option.EncryptIv))
-		cipher_data := make([]byte, len(data))
-		cfb.XORKeyStream(cipher_data, data)
-		data = cipher_data
-		hash_changed = true
-	}
-
-	return data, hash_changed, nil
-}
-
-func decode(data []byte, encrypt_key string, encrypt_iv string, attr ContentAttribute) ([]byte, error) {
-
-	if attr.Crypted() {
-		block, err := aes.NewCipher([]byte(encrypt_key))
+		key, err := keys.Current()
 		if err != nil {
 			return nil, err
 		}
-		cfb := cipher.NewCFBDecrypter(block, []byte(encrypt_iv))
-		cipher_data := make([]byte, len(data))
-		cfb.XORKeyStream(cipher_data, data)
-		data = cipher_data
+		data = key.Encrypt(data)
+	}
+
+	return data, nil
+}
+
+// decode は、encode したデータを元に戻す
+func decode(data []byte, keys *KeyRing, attr ContentAttribute) ([]byte, error) {
+	if attr.Crypted() {
+		var err error
+		data, err = keys.Decrypt(data)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if attr.Compressed() {

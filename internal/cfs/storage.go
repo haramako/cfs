@@ -3,11 +3,34 @@ package cfs
 import (
 	"fmt"
 	"net/url"
+	"time"
 )
 
+// キャビネットの中の配置（形式 v2）
+//
+//	data/xx/yyyy...      中身（ハッシュの先頭2文字/残り）。中身は変わらない
+//	manifest/xx/yyyy...  マニフェスト
+//	tag/<名前>           タグ（中身はマニフェストのハッシュ）
+//	config.json          キャビネットの設定（GC の保持期間など）
+//	gc/                  GC の状態（消す候補）と記録
+
+// ObjectInfo は、キャビネットに置いたものの情報
+type ObjectInfo struct {
+	Key          string // "data/xx/yyyy..." のようなキャビネット内の場所
+	Size         int64
+	LastModified time.Time
+}
+
+// Storage は、キャビネットへの書き込み口。ストレージを足すときは、これを実装して StorageFromUrl に追加する
 type Storage interface {
-	Upload(filename string, hash string, body []byte, overwrite bool) error
-	UploadTag(filename string, body []byte) error
+	// Put は key にデータを書く。overwrite が false で、既にあれば書かない
+	Put(key string, body []byte, overwrite bool) error
+	// Exists は key にデータがあるかを返す
+	Exists(key string) (bool, error)
+	// List は、prefix で始まる key のものを全部返す
+	List(prefix string) ([]ObjectInfo, error)
+	// Delete は key のものを消す（ないものは無視する）
+	Delete(keys []string) error
 }
 
 func StorageFromUrl(cabinetUrl *url.URL) (Storage, error) {

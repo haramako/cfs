@@ -13,21 +13,31 @@ import (
 
 type uploadRequest struct {
 	Filename string
-	Hash     string
+	Key      string
 	Data     []byte
 }
 
 type Client struct {
-	Manifest    *Manifest
+	Manifest  *Manifest
 	Storage   Storage
 	MaxWorker int
 	waitGroup sync.WaitGroup
 	queue     chan uploadRequest
+	keys      *KeyRing
+	signer    *SigningKey
 }
 
 func (c *Client) Init() error {
 	if c.MaxWorker == 0 {
 		c.MaxWorker = 32
+	}
+
+	var err error
+	if c.keys, err = Option.KeyRing(); err != nil {
+		return err
+	}
+	if c.signer, err = Option.Signer(); err != nil {
+		return err
 	}
 
 	c.queue = make(chan uploadRequest, c.MaxWorker)
@@ -44,37 +54,48 @@ func (c *Client) uploadWorker() {
 	defer c.waitGroup.Done()
 
 	for req := range c.queue {
-		err := c.Storage.Upload(req.Filename, req.Hash, req.Data, false)
+		// エラーのまま進むと、中身がないマニフェストを置いてしまうので止める
+		err := c.Storage.Put(req.Key, req.Data, false)
 		if err != nil {
 			panic(err)
 		}
 	}
 }
 
-func (c *Client) Encode(origHash string, origData []byte, attr ContentAttribute) (hash string, data []byte, err error) {
-	data, hashChanged, err := encode(origData, Option.EncryptKey, Option.EncryptIv, attr)
+// Encode は、属性に従って圧縮・暗号化し、キャビネットに置くデータとそのハッシュを返す
+func (c *Client) Encode(origData []byte, attr ContentAttribute) (hash string, data []byte, err error) {
+	data, err = encode(origData, c.keys, attr)
 	if err != nil {
 		return
 	}
-
-	if hashChanged {
-		hash = c.Manifest.Sum(data)
-	} else {
-		hash = origHash
-	}
-
+	hash = SumHash(data)
 	return
 }
 
-func (c *Client) Upload(filename string, origHash string, origData []byte, attr ContentAttribute) (string, int, error) {
-	hash, data, err := c.Encode(origHash, origData, attr)
+func (c *Client) Upload(filename string, origData []byte, attr ContentAttribute) (string, int, error) {
+	hash, data, err := c.Encode(origData, attr)
 	if err != nil {
 		return "", 0, err
 	}
 
-	c.queue <- uploadRequest{Filename: filename, Hash: hash, Data: data}
+	// 0 バイトのデータは置かない（ダウンロード側が空のファイルを作る）
+	if len(data) > 0 {
+		c.queue <- uploadRequest{Filename: filename, Key: dataKey(hash), Data: data}
+	}
 
 	return hash, len(data), nil
+}
+
+// ValidateCache は、手元のキャッシュ（前回のマニフェスト）を使ってよいかを確かめる。
+// 前回のマニフェストがキャビネットに残っていれば、GC はその中身を消さないので、キャッシュを信用できる
+func (m *Manifest) ValidateCache(s Storage) (bool, error) {
+	if len(m.Contents) == 0 {
+		return true, nil
+	}
+	if m.Hash == "" {
+		return false, nil
+	}
+	return s.Exists(manifestKey(m.Hash))
 }
 
 func (c *Client) AddFiles(root string) error {
@@ -158,7 +179,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		return false, err
 	}
 
-	origHash := b.Sum(origData)
+	origHash := SumHash(origData)
 	if found && old.OrigHash == origHash {
 		old.Time = info.ModTime() // 時間だけ更新する
 		old.Touched = true
@@ -167,7 +188,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 	}
 
 	attr := b.GetAttribute(relative)
-	hash, size, err := c.Upload(relative, origHash, origData, attr)
+	hash, size, err := c.Upload(relative, origData, attr)
 	if err != nil {
 		return false, err
 	}
@@ -198,10 +219,10 @@ func (c *Client) AddContent(relative string, content []byte) (bool, error) {
 		key = filepath.Base(key)
 	}
 
-	origHash := b.Sum(content)
+	origHash := SumHash(content)
 
 	attr := b.GetAttribute(relative)
-	hash, size, err := c.Upload(relative, origHash, content, attr)
+	hash, size, err := c.Upload(relative, content, attr)
 	if err != nil {
 		return false, err
 	}
@@ -240,15 +261,14 @@ func (c *Client) Finish() error {
 func (c *Client) UploadManifest() error {
 	b := c.Manifest
 
-	origData := []byte(b.Dump())
-	origHash := b.Sum(origData)
+	origData := b.Dump(c.signer)
 
-	hash, data, err := c.Encode(origHash, origData, DefaultContentAttribute())
+	hash, data, err := c.Encode(origData, DefaultContentAttribute())
 	if err != nil {
 		return err
 	}
 
-	err = c.Storage.Upload("*manifest*", hash, data, false)
+	err = c.Storage.Put(manifestKey(hash), data, false)
 	if err != nil {
 		return err
 	}
@@ -269,7 +289,7 @@ func (c *Client) UploadManifest() error {
 
 	// タグが設定されているなら、保存する
 	if b.Tag != "" {
-		err = c.Storage.UploadTag(b.Tag, []byte(b.Hash))
+		err = c.Storage.Put(tagKey(b.Tag), []byte(b.Hash), true)
 		if err != nil {
 			return err
 		}

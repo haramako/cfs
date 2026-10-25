@@ -1,30 +1,32 @@
 package cfs
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestUploadWithFailure(t *testing.T) {
-	manifest := &Manifest{HashType: "md5", Contents: make(map[string]Content)}
+	manifest := NewManifest()
 
 	storage, err := NewDummyStorage("")
 	if err != nil {
 		t.Errorf("Can't create DummyStorage.")
 	}
-	storage.onUpload = func(filename string, hash string, body []byte, overwrite bool) error {
-		if filename == "error" {
-			time.Sleep(time.Millisecond * 100) // Wait a while
-			// return errors.Errorf("error for DummyStorage") // tODO: enable for testing
+	storage.onPut = func(key string, body []byte, overwrite bool) error {
+		if strings.HasPrefix(key, "data/") {
+			time.Sleep(time.Millisecond * 10) // Wait a while
 		}
 		return nil
 	}
 
 	client := &Client{
-		Manifest:  manifest,
-		Storage: storage,
+		Manifest: manifest,
+		Storage:  storage,
 	}
-	client.Init()
+	if err := client.Init(); err != nil {
+		t.Fatal(err)
+	}
 
 	client.AddContent("hoge", []byte("hoge"))
 	client.AddContent("fuga", []byte("hoge"))
@@ -35,4 +37,13 @@ func TestUploadWithFailure(t *testing.T) {
 		t.Error(err)
 	}
 
+	// マニフェストと中身が置かれていること
+	if ok, _ := storage.Exists(manifestKey(manifest.Hash)); !ok {
+		t.Errorf("manifest must be uploaded")
+	}
+	for _, c := range manifest.Contents {
+		if ok, _ := storage.Exists(dataKey(c.Hash)); !ok {
+			t.Errorf("data of %s must be uploaded", c.Path)
+		}
+	}
 }

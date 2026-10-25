@@ -7,7 +7,7 @@ import (
 )
 
 func TestPack(t *testing.T) {
-	hash := "0123456789abcdef0123456789abcdef"
+	hash := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	entries := []Entry{
 		{Path: "hoge", Hash: hash, Size: 4},
 		{Path: "fugafuga", Hash: hash, Size: 8},

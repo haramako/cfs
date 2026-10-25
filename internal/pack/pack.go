@@ -2,7 +2,7 @@ package pack
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -31,7 +31,7 @@ type Entry struct {
 }
 
 // PackFileVersion は現在のPackファイルのバージョン
-const PackFileVersion = 1
+const PackFileVersion = 2
 
 // 標準的に使用するエンディアン
 var endian = binary.LittleEndian
@@ -68,12 +68,8 @@ func Parse(r io.Reader) (*PackFile, error) {
 	for i := range entries {
 		e := &entries[i]
 		e.Data = make([]byte, e.Size)
-		len, err := r.Read(e.Data)
-		if len != e.Size {
-			return nil, fmt.Errorf("invalid read size")
-		}
-		if err != nil {
-			return nil, err
+		if _, err := io.ReadFull(r, e.Data); err != nil {
+			return nil, fmt.Errorf("invalid read size of %s: %w", e.Path, err)
 		}
 	}
 
@@ -153,7 +149,7 @@ func NewPackFileFromDir(dir string) (*PackFile, error) {
 			if err != nil {
 				return err
 			}
-			hash := fmt.Sprintf("%x", md5.Sum(data))
+			hash := fmt.Sprintf("%x", sha256.Sum256(data))
 
 			entries = append(entries, Entry{
 				Path: entryPath,
@@ -272,7 +268,7 @@ func decodeEntryList(bin []byte, entrySize int) ([]Entry, error) {
 		var pathBytes [256]byte
 		var pos uint32
 		var size uint32
-		var hash [16]byte
+		var hash [sha256.Size]byte
 
 		err := binary.Read(r, endian, &pathLen)
 		if err != nil {

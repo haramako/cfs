@@ -27,7 +27,10 @@ CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 
 - `manifest_test.go` が主要な結合テスト（新規アップロード、上書き、圧縮、無圧縮拡張子、タグ）。`TestMain` で暗号鍵/IV を固定値に設定している
 - `s3_storage_test.go` は `httptest` の偽サーバーに対して、送られるリクエスト（パス・ACL・Content-Type・既存確認・0 バイト時の挙動）を確認する。`newS3Storage` の `optFns` でエンドポイントを差し替えている。GCS の偽サーバーテストは GCS と一緒に外した（git 履歴の 20d4f1d に残る）
-- `client_test.go` は `DummyStorage` を使ったアップロードテスト（失敗注入部分はコメントアウトされたまま）
+- `client_test.go` は `DummyStorage` を使ったアップロードテスト
+- `format_v2_test.go` は形式 v2（暗号化の決定性・鍵の入れ替え、マニフェストの読み書き・署名・改ざん検出、キャッシュの信用、ハッシュの照合、タグ名）
+- `gc_test.go` は GC（タグと保持期間内を残す、2 回連続ルール、「マニフェストが先・中身は後」、共有データ、dry-run、読めないマニフェストでの中止、キャビネット設定、タグの一覧・削除）。`DummyStorage` の `now` で時刻を進めて試す
+- `location_test.go` / `fetcher_test.go` はパスと URL の判定、Windows のパス、`.cfsenv` 基準の相対パス、環境変数、取得口
 - `internal/pack/pack_test.go` はパック/パースの往復テスト
 - `config_test.go` は実際のホームディレクトリに `~/.cfs/` を作る
 

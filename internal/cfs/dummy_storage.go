@@ -1,60 +1,109 @@
 package cfs
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"sort"
+	"strings"
 	"sync"
+	"time"
 )
 
+// DummyStorage は、テスト用のメモリ上のキャビネット。書き込み（Storage）と読み込み（Fetcher）の両方を行う
 type DummyStorage struct {
 	CabinetPath string
-	mutex       sync.Mutex // Upload は複数のワーカーから並列に呼ばれる
-	contents    map[string][]byte
-	tags        map[string][]byte
+	mutex       sync.Mutex // Put は複数のワーカーから並列に呼ばれる
+	objects     map[string]dummyObject
 
-	onUpload func(filename string, hash string, body []byte, overwrite bool) error
+	// now は、置いたものの更新日時に使う時刻（テストで差し替える）
+	now func() time.Time
+
+	onPut func(key string, body []byte, overwrite bool) error
+}
+
+type dummyObject struct {
+	body         []byte
+	lastModified time.Time
 }
 
 func NewDummyStorage(cabinetPath string) (*DummyStorage, error) {
-	s := &DummyStorage{
+	return &DummyStorage{
 		CabinetPath: cabinetPath,
-		contents:    make(map[string][]byte),
-		tags:        make(map[string][]byte),
-	}
-
-	return s, nil
+		objects:     make(map[string]dummyObject),
+		now:         time.Now,
+	}, nil
 }
 
-func (s *DummyStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {
-	if !isHash(hash) {
-		return fmt.Errorf("%v is not hash", hash)
-	}
-
-	if s.onUpload != nil {
-		err := s.onUpload(filename, hash, body, overwrite)
-		if err != nil {
+func (s *DummyStorage) Put(key string, body []byte, overwrite bool) error {
+	if s.onPut != nil {
+		if err := s.onPut(key, body, overwrite); err != nil {
 			return err
 		}
 	}
 
 	s.mutex.Lock()
-	s.contents[hash] = body
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
+	if _, ok := s.objects[key]; ok && !overwrite {
+		return nil
+	}
+	s.objects[key] = dummyObject{body: append([]byte(nil), body...), lastModified: s.now()}
 
 	if Verbose {
-		fmt.Printf("uploading '%s' as '%s'\n", filename, hash)
+		fmt.Printf("uploading '%s'\n", key)
 	}
-
 	return nil
 }
 
-func (s *DummyStorage) UploadTag(filename string, body []byte) error {
+func (s *DummyStorage) Exists(key string) (bool, error) {
 	s.mutex.Lock()
-	s.tags[filename] = body
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
+	_, ok := s.objects[key]
+	return ok, nil
+}
 
-	if Verbose {
-		fmt.Printf("uploading tag '%s'\n", filename)
+func (s *DummyStorage) List(prefix string) ([]ObjectInfo, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	var result []ObjectInfo
+	for key, o := range s.objects {
+		if strings.HasPrefix(key, prefix) {
+			result = append(result, ObjectInfo{Key: key, Size: int64(len(o.body)), LastModified: o.lastModified})
+		}
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Key < result[j].Key })
+	return result, nil
+}
 
+func (s *DummyStorage) Delete(keys []string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, key := range keys {
+		delete(s.objects, key)
+	}
+	return nil
+}
+
+func (s *DummyStorage) Open(key string) (io.ReadCloser, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	o, ok := s.objects[key]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, key)
+	}
+	return io.NopCloser(bytes.NewReader(o.body)), nil
+}
+
+// setLastModified は、テストで更新日時を古くするために使う
+func (s *DummyStorage) setLastModified(key string, t time.Time) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	o, ok := s.objects[key]
+	if !ok {
+		return errors.New("no object " + key)
+	}
+	o.lastModified = t
+	s.objects[key] = o
 	return nil
 }

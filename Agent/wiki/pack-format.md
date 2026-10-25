@@ -7,7 +7,7 @@
 すべてリトルエンディアン。
 
 ```
-header        3 bytes   'T' 'P' version(=1)
+header        3 bytes   'T' 'P' version(=2。2026-10-25 に SHA-256 化で 1 から上げた)
 listSize      uint32    エントリリスト部のバイト数
 entryList:
   count       uint32
@@ -16,7 +16,7 @@ entryList:
     path      pathLen bytes, UTF-8, '/' 区切り
     pos       uint32    ファイル先頭からのデータ位置（絶対オフセット）
     size      uint32
-    hash      16 bytes  元データの MD5
+    hash      32 bytes  元データの SHA-256
 data          各エントリのデータをパス順に連結（非圧縮・非暗号）
 ```
 

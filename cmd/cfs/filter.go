@@ -41,7 +41,6 @@ func filterManifest(cmd string, b *cfs.Manifest) (*cfs.Manifest, error) {
 	entries = newEntries
 
 	return &cfs.Manifest{
-		HashType: "md5",
 		Contents: entries,
 		Tag:      b.Tag,
 	}, nil

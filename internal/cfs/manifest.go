@@ -1,7 +1,7 @@
 package cfs
 
 import (
-	"crypto/md5"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,14 +17,22 @@ var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 // Verbose 詳細なログを表示するかどうか
 var Verbose = false
 
-// Manifest マニフェスト
+// マニフェストの形式（形式 v2）
+//
+//	#cfs-manifest 2
+//	<ハッシュ>\t<パス>\t<サイズ>\t<更新日時>\t<元のハッシュ>\t<元のサイズ>\t<属性>   … 1 ファイル 1 行、パス順
+//	#signature ed25519 <鍵 ID> <署名>   … 署名する場合だけ。それより前の全バイトへの署名
+const (
+	manifestHeader          = "#cfs-manifest 2"
+	manifestSignaturePrefix = "#signature ed25519 "
+)
+
+// Manifest マニフェスト（1 回のアップロードで記録されるファイル一覧）
 type Manifest struct {
 	Tag         string
-	Path        string
+	Path        string // 手元のキャッシュのファイル（前回のアップロードのマニフェスト）
 	Hash        string
-	ExcludeList []string
 	Contents    map[string]Content
-	HashType    string
 	UploadCount int
 }
 
@@ -43,10 +51,10 @@ const (
 // Content は一つのファイルの内容を表すstruct
 type Content struct {
 	Path     string
-	Hash     string
+	Hash     string // キャビネットに置いたデータ（圧縮・暗号化後）のハッシュ
 	Time     time.Time
 	Size     int
-	OrigHash string
+	OrigHash string // 元のファイルのハッシュ
 	OrigSize int
 	Attr     ContentAttribute
 	Touched  bool
@@ -76,61 +84,98 @@ func (c ContentAttribute) Crypted() bool {
 func NewManifest() *Manifest {
 	return &Manifest{
 		Contents: make(map[string]Content),
-		HashType: "md5",
 	}
 }
 
+// ManifestFromFile は、手元のキャッシュからマニフェストを読む。
+// ファイルがない、または読めない（古い形式など）場合は、空のマニフェストを返す
 func ManifestFromFile(path string) (*Manifest, error) {
-	b := &Manifest{
-		Path:     path,
-		Contents: make(map[string]Content),
-		HashType: "md5",
-	}
+	b := NewManifest()
+	b.Path = path
 	data, err := os.ReadFile(filepath.FromSlash(path))
-	if err == nil {
+	if err != nil {
+		return b, nil
+	}
+	if Verbose {
+		fmt.Printf("read manifest from '%s'\n", b.Path)
+	}
+	if err := b.Parse(data, nil); err != nil {
 		if Verbose {
-			fmt.Printf("read manifest from '%s'\n", b.Path)
+			fmt.Printf("ignore local manifest cache '%s': %v\n", b.Path, err)
 		}
-		err := b.Parse(data)
-		if err != nil {
-			return nil, err
-		}
+		b = NewManifest()
+		b.Path = path
+		return b, nil
+	}
+	hash, err := os.ReadFile(filepath.FromSlash(path) + ".hash")
+	if err == nil && isHash(strings.TrimSpace(string(hash))) {
+		b.Hash = strings.TrimSpace(string(hash))
 	}
 	return b, nil
-
 }
 
-func (b *Manifest) Parse(s []byte) error {
-	for _, line := range strings.Split(string(s), "\n") {
-		if len(s) != 0 {
-			col := strings.Split(line, "\t")
-			if len(col) >= 3 {
-				size, err := strconv.Atoi(col[2])
-				if err != nil {
-					return err
-				}
-				time, err := time.Parse(time.RFC3339, col[3])
-				if err != nil {
-					return err
-				}
-				origSize, err := strconv.Atoi(col[5])
-				if err != nil {
-					return err
-				}
-				attr, err := strconv.Atoi(col[6])
-				if err != nil {
-					return err
-				}
-				b.Contents[col[1]] = Content{
-					Hash:     col[0],
-					Path:     col[1],
-					Size:     size,
-					Time:     time,
-					OrigHash: col[4],
-					OrigSize: origSize,
-					Attr:     ContentAttribute(attr),
-				}
-			}
+// Parse は、形式 v2 のマニフェストを読む。verifier に鍵が設定されていれば、署名を確かめる
+func (b *Manifest) Parse(data []byte, verifier *Verifier) error {
+	body := data
+	var keyID, signature string
+	if i := bytes.Index(data, []byte("\n"+manifestSignaturePrefix)); i >= 0 {
+		body = data[:i+1]
+		fields := strings.Fields(strings.TrimPrefix(string(data[i+1:]), manifestSignaturePrefix))
+		if len(fields) != 2 {
+			return fmt.Errorf("invalid manifest signature line")
+		}
+		keyID, signature = fields[0], fields[1]
+	}
+
+	if verifier.Enabled() {
+		if signature == "" {
+			return fmt.Errorf("manifest is not signed (VerifyKeys is set)")
+		}
+		if err := verifier.Verify(body, keyID, signature); err != nil {
+			return err
+		}
+	}
+
+	lines := strings.Split(string(body), "\n")
+	if strings.TrimRight(lines[0], "\r") != manifestHeader {
+		return fmt.Errorf("unsupported manifest format (header %q)", lines[0])
+	}
+
+	for n, line := range lines[1:] {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		col := strings.Split(line, "\t")
+		if len(col) != 7 {
+			return fmt.Errorf("invalid manifest line %d: %q", n+2, line)
+		}
+		size, err := strconv.Atoi(col[2])
+		if err != nil {
+			return err
+		}
+		time, err := time.Parse(time.RFC3339, col[3])
+		if err != nil {
+			return err
+		}
+		origSize, err := strconv.Atoi(col[5])
+		if err != nil {
+			return err
+		}
+		attr, err := strconv.Atoi(col[6])
+		if err != nil {
+			return err
+		}
+		if !isHash(col[0]) || !isHash(col[4]) {
+			return fmt.Errorf("invalid hash in manifest line %d", n+2)
+		}
+		b.Contents[col[1]] = Content{
+			Hash:     col[0],
+			Path:     col[1],
+			Size:     size,
+			Time:     time,
+			OrigHash: col[4],
+			OrigSize: origSize,
+			Attr:     ContentAttribute(attr),
 		}
 	}
 	return nil
@@ -141,18 +186,6 @@ func (b *Manifest) Parse(s []byte) error {
 func (b *Manifest) Merge(from *Manifest) {
 	for _, c := range from.Contents {
 		b.Contents[c.Path] = c
-	}
-}
-
-func (b *Manifest) Sum(data []byte) string {
-	switch b.HashType {
-	case "sha1":
-		panic("not supported")
-		//return fmt.Sprintf("%x", sha1.Sum(data))
-	case "md5":
-		return fmt.Sprintf("%x", md5.Sum(data))
-	default:
-		panic("invalid hash type")
 	}
 }
 
@@ -170,34 +203,49 @@ func (b *Manifest) RemoveUntouched() {
 	b.Contents = newContents
 }
 
-// Dump は、Manifestの内容をダンプする
-func (b *Manifest) Dump() string {
+// Dump は、Manifestの内容を形式 v2 で書き出す。signer があれば署名を付ける
+func (b *Manifest) Dump(signer *SigningKey) []byte {
 	keys := []string{}
 	for k := range b.Contents {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	r := make([]string, 0)
+	var buf bytes.Buffer
+	buf.WriteString(manifestHeader + "\n")
 	for _, k := range keys {
 		c := b.Contents[k]
-		r = append(
-			r,
-			strings.Join(
-				[]string{
-					c.Hash,
-					c.Path,
-					strconv.Itoa(c.Size),
-					c.Time.Format(time.RFC3339),
-					c.OrigHash,
-					strconv.Itoa(c.OrigSize),
-					strconv.Itoa(int(c.Attr)),
-				},
-				"\t"))
+		buf.WriteString(strings.Join(
+			[]string{
+				c.Hash,
+				c.Path,
+				strconv.Itoa(c.Size),
+				c.Time.Format(time.RFC3339),
+				c.OrigHash,
+				strconv.Itoa(c.OrigSize),
+				strconv.Itoa(int(c.Attr)),
+			},
+			"\t") + "\n")
 	}
 
-	return strings.Join(r, "\n") + "\n"
+	if signer != nil {
+		sig := signer.Sign(buf.Bytes())
+		buf.WriteString(manifestSignaturePrefix + signer.KeyID() + " " + sig + "\n")
+	}
+	return buf.Bytes()
 }
+
+// DataHashes は、マニフェストが参照するデータのハッシュの一覧を返す（0 バイトのものは置かれないので除く）
+func (b *Manifest) DataHashes() []string {
+	hashes := make([]string, 0, len(b.Contents))
+	for _, c := range b.Contents {
+		if c.Size > 0 {
+			hashes = append(hashes, c.Hash)
+		}
+	}
+	return hashes
+}
+
 func (b *Manifest) GetAttribute(path string) ContentAttribute {
 	var attr = DefaultContentAttribute()
 	// TODO: とりあえずフィルタを固定している

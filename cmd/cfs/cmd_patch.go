@@ -47,6 +47,7 @@ func doPatch(_ context.Context, c *cli.Command) error {
 
 	// Calculate diff
 	patch, err := pack.Patch(basepack, currentpack)
+	check(err)
 
 	// Make patch pack
 	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)

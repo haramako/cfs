@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/natefinch/atomic"
@@ -26,33 +27,44 @@ func NewDownloader(location string) (*Downloader, error) {
 	return &Downloader{fetcher: fetcher}, nil
 }
 
+// ResolveLocation は、ロケーション（タグ名かマニフェストのハッシュ）をマニフェストのハッシュにする
+func (d *Downloader) ResolveLocation(location string) (string, error) {
+	if isHash(location) {
+		return location, nil
+	}
+	data, err := d.FetchTag(location)
+	if err != nil {
+		return "", err
+	}
+	hash := strings.TrimSpace(string(data))
+	if !isHash(hash) {
+		return "", fmt.Errorf("tag %s does not point to a manifest hash: %q", location, hash)
+	}
+	return hash, nil
+}
+
+// LoadManifest は、ロケーション（タグ名かマニフェストのハッシュ）のマニフェストを読む。
+// .cfsenv に VerifyKeys があれば、署名を確かめる
 func (d *Downloader) LoadManifest(location string) (*Manifest, error) {
-
-	b := &Manifest{
-		Contents: make(map[string]Content),
-		HashType: "md5",
-	}
-
-	var body []byte
-	if !isHash(location) {
-		locationBytes, err := d.FetchTag(location)
-		if err != nil {
-			return nil, err
-		}
-		location = string(locationBytes)
-		if !isHash(location) {
-			return nil, fmt.Errorf("%s is not hash", location)
-		}
-	}
-
-	body, err := d.Fetch(location, DefaultContentAttribute())
+	hash, err := d.ResolveLocation(location)
 	if err != nil {
 		return nil, err
 	}
 
-	err = b.Parse(body)
+	body, err := d.fetchObject(manifestKey(hash), hash, DefaultContentAttribute())
 	if err != nil {
 		return nil, err
+	}
+
+	verifier, err := Option.Verifier()
+	if err != nil {
+		return nil, err
+	}
+
+	b := NewManifest()
+	b.Hash = hash
+	if err := b.Parse(body, verifier); err != nil {
+		return nil, fmt.Errorf("manifest %s: %w", hash, err)
 	}
 
 	return b, nil
@@ -73,8 +85,12 @@ func (d *Downloader) ExistsAll(b *Manifest) (map[string]bool, error) {
 				if Verbose {
 					fmt.Printf("verifying %s (%s)\n", c.Path, c.Hash)
 				}
-				// 確認できなかった場合も、ないものとして扱う
-				exists, _ := d.fetcher.Exists(dataPath(c.Hash))
+				// 0 バイトのデータは置かれない
+				exists := c.Size == 0
+				if !exists {
+					// 確認できなかった場合も、ないものとして扱う
+					exists, _ = d.fetcher.Exists(dataKey(c.Hash))
+				}
 				mutex.Lock()
 				result[c.Path] = exists
 				mutex.Unlock()
@@ -98,7 +114,7 @@ func (d *Downloader) Sync(b *Manifest, dir string) error {
 			fmt.Printf("downloading %s\n", c.Path)
 		}
 
-		// TODO: 0 bytesのファイルはアップロードがされていないため、空ファイルを作る
+		// 0 バイトのデータは置かれないので、空ファイルを作る
 		var err error
 		data := []byte{}
 		if c.Size > 0 {
@@ -141,9 +157,8 @@ func (d *Downloader) FetchAll(b *Manifest) error {
 					fmt.Printf("downloading %s\n", c.Path)
 				}
 
-				// TODO: 0 bytesのファイルはアップロードがされていないため、空ファイルを作る
+				// 0 バイトのデータは置かれないので、取得しない
 				if c.Size == 0 {
-					os.Create(filepath.Join(GlobalDataCacheDir(), c.Hash))
 					return nil
 				}
 
@@ -177,44 +192,45 @@ func (d *Downloader) FetchAll(b *Manifest) error {
 	return nil
 }
 
+// Fetch は、中身のハッシュのデータを取得して元に戻す
 func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 	if !isHash(hash) {
 		return nil, fmt.Errorf("cannot fetch data, %s is not a hash", hash)
 	}
+	if hash == SumHash(nil) {
+		// 0 バイトのデータは置かれない
+		return decode(nil, nil, attr)
+	}
+	return d.fetchObject(dataKey(hash), hash, attr)
+}
 
-	var data []byte
-
-	// データをキャッシュしているパス取得
+// fetchObject は、キャビネットの key のデータを（手元のキャッシュを使って）取得し、ハッシュを確かめて元に戻す
+func (d *Downloader) fetchObject(key string, hash string, attr ContentAttribute) ([]byte, error) {
 	cache := filepath.Join(GlobalDataCacheDir(), hash)
-	_, err := os.Stat(cache)
-	if !os.IsNotExist(err) {
-		data, err = os.ReadFile(cache)
+
+	data, err := os.ReadFile(cache)
+	if err != nil || SumHash(data) != hash {
+		// キャッシュがない、または壊れているので取得し直す
+		data, err = fetchAll(d.fetcher, key)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-
-		// ファイルダウンロード
-		data, err = fetchAll(d.fetcher, dataPath(hash))
-		if err != nil {
-			return nil, err
+		if SumHash(data) != hash {
+			return nil, fmt.Errorf("hash mismatch for %s (got %s)", key, SumHash(data))
 		}
-
-		// データファイルをキャッシュする
 		err = atomic.WriteFile(cache, bytes.NewBuffer(data))
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return decode(data, Option.EncryptKey, Option.EncryptIv, attr)
+	keys, err := Option.KeyRing()
+	if err != nil {
+		return nil, err
+	}
+	return decode(data, keys, attr)
 }
 
 func (d *Downloader) FetchTag(tag string) ([]byte, error) {
-	return fetchAll(d.fetcher, "tag/"+tag)
-}
-
-// dataPath は、中身のハッシュからキャビネット上のパスを返す
-func dataPath(hash string) string {
-	return "data/" + hashPath(hash)
+	return fetchAll(d.fetcher, tagKey(tag))
 }

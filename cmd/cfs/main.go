@@ -76,6 +76,10 @@ func main() {
 		unpackCommand,
 		packManifestCommand,
 		patchCommand,
+		gcCommand,
+		tagCommand,
+		cabinetCommand,
+		keygenCommand,
 	}
 
 	err := app.Run(context.Background(), os.Args)
@@ -208,23 +212,40 @@ func doUpload(_ context.Context, c *cli.Command) error {
 		manifestPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
-	var err error
-	var manifest *cfs.Manifest
-	if cfs.Option.NoCache {
-		manifest = cfs.NewManifest()
-		manifest.Path = manifestPath
-	} else {
-		manifest, err = cfs.ManifestFromFile(manifestPath)
-		check(err)
+	tag := c.String("tag")
+	if tag != "" {
+		if err := cfs.ValidateTagName(tag); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
-	manifest.Tag = c.String("tag")
 
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
 	check(err)
 
+	var manifest *cfs.Manifest
+	if !cfs.Option.NoCache {
+		manifest, err = cfs.ManifestFromFile(manifestPath)
+		check(err)
+		// 前回のマニフェストが GC で消えていたら、中身も消えているかもしれないので、キャッシュを使わない
+		ok, err := manifest.ValidateCache(storage)
+		check(err)
+		if !ok {
+			if cfs.Verbose {
+				fmt.Printf("previous manifest %s is not in the cabinet, check all files\n", manifest.Hash)
+			}
+			manifest = nil
+		}
+	}
+	if manifest == nil {
+		manifest = cfs.NewManifest()
+		manifest.Path = manifestPath
+	}
+	manifest.Tag = tag
+
 	client := &cfs.Client{
-		Storage: storage,
-		Manifest:  manifest,
+		Storage:  storage,
+		Manifest: manifest,
 	}
 
 	check(client.Init())
@@ -310,11 +331,13 @@ func doMerge(_ context.Context, c *cli.Command) error {
 	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
-	merged := &cfs.Manifest{
-		Tag:      mergeTo,
-		Contents: make(map[string]cfs.Content),
-		HashType: "md5",
+	if err := cfs.ValidateTagName(mergeTo); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
+
+	merged := cfs.NewManifest()
+	merged.Tag = mergeTo
 
 	for _, location := range mergeFrom {
 		manifest, err := downloader.LoadManifest(location)
@@ -341,8 +364,8 @@ func doMerge(_ context.Context, c *cli.Command) error {
 	check(err)
 
 	client := &cfs.Client{
-		Storage: storage,
-		Manifest:  merged,
+		Storage:  storage,
+		Manifest: merged,
 	}
 
 	check(client.Init())

@@ -1,6 +1,6 @@
 # アーキテクチャ概要
 
-CFS (Content base File System) は、ゲームアセットのような大量ファイルを **内容ハッシュ (MD5) 単位で差分アップロード／ダウンロード** する Go 製ツール。git のオブジェクトストアに近い構造で、同一内容のファイルはバージョンやプラットフォームをまたいで 1 つに共有される。
+CFS (Content base File System) は、ゲームアセットのような大量ファイルを **内容ハッシュ (SHA-256。2026-10-25 までは MD5) 単位で差分アップロード／ダウンロード** する Go 製ツール。git のオブジェクトストアに近い構造で、同一内容のファイルはバージョンやプラットフォームをまたいで 1 つに共有される。
 
 - モジュール: `github.com/haramako/cfs`（`go.mod` は go 1.26）
 - 成果物: CLI `cfs`（`cmd/cfs`）のみ。実装は `internal/` にあり、外部からライブラリとしては使えない（2026-10 に CLI 専用と決定）
@@ -18,7 +18,10 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 | `storage.go` | `Storage` インターフェースと URL スキームからの生成（`file://` / `s3://`。`gs://` は 2026-10-25 に外した） |
 | `file_storage.go` / `s3_storage.go` | 各バックエンドの書き込み実装 |
 | `dummy_storage.go` | テスト用のメモリ内ストレージ |
-| `util.go` | ハッシュ判定、`xx/yyyy…` パス変換、zlib 圧縮 + AES-CFB 暗号の `encode`/`decode` |
+| `util.go` | ハッシュ（SHA-256）、キャビネット上の場所（`dataKey` など）、zlib 圧縮と暗号化の `encode`/`decode` |
+| `crypt.go` / `signing.go` | 暗号化（AES-256-CTR、鍵の導出、鍵 ID）とマニフェストの署名（Ed25519） |
+| `gc.go` | GC、タグの一覧・削除、キャビネットの設定（`config.json`） |
+| `fetcher.go` / `location.go` | 読み込み口（ファイル・HTTP）と、URL・パスの判定 |
 | `option.go` | プロジェクト単位の設定 `.cfsenv`（JSON）→ グローバル変数 `Option` |
 | `config.go` | ユーザー単位の設定 `~/.cfs_setting`（YAML）とキャッシュディレクトリ（`~/.cfs/…`） |
 | `internal/pack/` | 独自バイナリ形式のパックファイル（`TP` 形式）。詳細は [pack-format.md](pack-format.md) |
@@ -37,19 +40,19 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 
 ## アップロードの流れ（`cfs upload`）
 
-1. `.cfsenv` を読み、ローカルのマニフェストのキャッシュ（前回アップロード時のマニフェスト）を `~/.cfs/cache/<md5>` からロード
+1. `.cfsenv` を読み、ローカルのマニフェストのキャッシュ（前回アップロード時のマニフェスト）を `~/.cfs/cache/<md5>` からロード。`.hash` のハッシュで `manifest/` にまだあるかを 1 回確かめ（`ValidateCache`）、なければキャッシュを捨てる
 2. `Client.AddFiles` で対象ディレクトリを走査（除外ルールは [known-issues-and-gotchas.md](known-issues-and-gotchas.md) 参照）
 3. `Client.AddFile` で変更検出
    - 前回の `Time + 1秒` 以前の mtime かつサイズ一致 → 読まずにスキップ
-   - 読み込んで MD5（`OrigHash`）が一致 → 時刻だけ更新
+   - 読み込んで SHA-256（`OrigHash`）が一致 → 時刻だけ更新
    - それ以外 → `encode`（圧縮→暗号化）してキューに積む
-4. 32 並列の `uploadWorker` が `Storage.Upload` を呼ぶ（既存ハッシュはバックエンド側でスキップ）
+4. 32 並列の `uploadWorker` が `Storage.Put(data/..., overwrite=false)` を呼ぶ（既にあればバックエンド側でスキップ。0 バイトは置かない）
 5. `RemoveUntouched` で今回見つからなかったエントリを削除（マニフェスト＝ディレクトリの完全なスナップショット）
-6. `Client.Finish` → `UploadManifest`: マニフェスト自体もエンコードして `data/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
+6. `Client.Finish` → `UploadManifest`: マニフェスト（署名の鍵があれば署名付き）をエンコードして `manifest/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
 
 ## ダウンロードの流れ（`cfs sync`）
 
-1. `location` が 32 桁 hex ならマニフェストハッシュ、そうでなければタグ名として `tag/<name>` を GET してハッシュを得る
+1. `location` が 64 桁 hex ならマニフェストハッシュ、そうでなければタグ名として `tag/<name>` を GET してハッシュを得る
 2. マニフェスト本体を `Fetch`（`DefaultContentAttribute()` でデコード）→ TSV をパース
 3. 必要なら `--filter-cmd` でファイルを絞り込む
 4. 各 `Content` を `Fetch`。`~/.cfs/datacache/<hash>` にあればそれを使い、なければダウンロードしてキャッシュ（キャッシュはエンコード済みのまま保存）→ デコードして出力先に atomic write

@@ -33,9 +33,11 @@ func NewS3Storage(bucketName string) (*S3Storage, error) {
 func newS3Storage(bucketName string, optFns ...func(*s3.Options)) (*S3Storage, error) {
 	ctx := context.Background()
 
-	// 単純な PutObject にするため、チェックサムは必要な場合だけ付ける
+	// 単純な PutObject にするため、チェックサムは必要な場合だけ付ける（取得時の検証もしない。
+	// 中身はハッシュで確かめる）
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
+		config.WithResponseChecksumValidation(aws.ResponseChecksumValidationWhenRequired),
 	)
 	if err != nil {
 		return nil, err
@@ -84,62 +86,85 @@ func detectBucketRegion(ctx context.Context, cfg aws.Config, bucketName string, 
 	return ""
 }
 
-func (s *S3Storage) Upload(filename string, hash string, body []byte, overwrite bool) error {
-	path := "data/" + hashPath(hash)
+func (s *S3Storage) Put(key string, body []byte, overwrite bool) error {
 	ctx := context.Background()
 
 	if !overwrite {
+		// 既にあるかは ListObjectsV2 で確かめる（s3:ListBucket の権限で足りる）
 		found, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket:    aws.String(s.BucketName),
-			Prefix:    aws.String(path),
+			Prefix:    aws.String(key),
 			Delimiter: aws.String("/"),
 			MaxKeys:   aws.Int32(1),
 		})
 		if err != nil {
 			return err
 		}
-		if len(found.Contents) > 0 {
+		if len(found.Contents) > 0 && aws.ToString(found.Contents[0].Key) == key {
 			// already exists
 			return nil
 		}
 	}
 
-	// TODO: sizeが0だとエラーになるため、送信しないようにしている
-	if len(body) > 0 {
-		err := s.put(ctx, path, body)
-		if err != nil {
-			return err
-		}
-		if Verbose {
-			fmt.Printf("uploading '%s'\n", path)
-		}
-	}
-
-	return nil
-}
-
-func (s *S3Storage) UploadTag(filename string, body []byte) error {
-	path := "tag/" + filename
-
-	err := s.put(context.Background(), path, body)
-	if err != nil {
-		return err
-	}
-	if Verbose {
-		fmt.Printf("uploading '%s'\n", path)
-	}
-	return nil
-}
-
-func (s *S3Storage) put(ctx context.Context, path string, body []byte) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.BucketName),
-		Key:         aws.String(path),
+		Key:         aws.String(key),
 		Body:        bytes.NewReader(body),
 		ContentType: aws.String("binary/octet-stream"),
 		ACL:         types.ObjectCannedACLBucketOwnerFullControl,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if Verbose {
+		fmt.Printf("uploading '%s'\n", key)
+	}
+	return nil
+}
+
+func (s *S3Storage) List(prefix string) ([]ObjectInfo, error) {
+	var result []ObjectInfo
+	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
+		Bucket: aws.String(s.BucketName),
+		Prefix: aws.String(prefix),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range page.Contents {
+			result = append(result, ObjectInfo{
+				Key:          aws.ToString(o.Key),
+				Size:         aws.ToInt64(o.Size),
+				LastModified: aws.ToTime(o.LastModified),
+			})
+		}
+	}
+	return result, nil
+}
+
+func (s *S3Storage) Delete(keys []string) error {
+	// DeleteObjects は 1 回に 1000 件まで
+	for start := 0; start < len(keys); start += 1000 {
+		end := min(start+1000, len(keys))
+		objects := make([]types.ObjectIdentifier, 0, end-start)
+		for _, key := range keys[start:end] {
+			objects = append(objects, types.ObjectIdentifier{Key: aws.String(key)})
+		}
+		out, err := s.client.DeleteObjects(context.Background(), &s3.DeleteObjectsInput{
+			Bucket: aws.String(s.BucketName),
+			Delete: &types.Delete{Objects: objects, Quiet: aws.Bool(true)},
+		})
+		if err != nil {
+			return err
+		}
+		if len(out.Errors) > 0 {
+			e := out.Errors[0]
+			return fmt.Errorf("cannot delete s3://%s/%s: %s", s.BucketName, aws.ToString(e.Key), aws.ToString(e.Message))
+		}
+	}
+	return nil
 }
 
 // Open は S3 からデータを直接読む（Fetcher）

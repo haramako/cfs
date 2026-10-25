@@ -1,16 +1,21 @@
 package cfs
 
 import (
+	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -28,6 +33,8 @@ type fakeS3 struct {
 	mutex       sync.Mutex
 	region      string // HeadBucket で返すリージョン。空ならヘッダーを付けない
 	objects     map[string][]byte
+	modified    map[string]time.Time
+	deleted     []string
 	lists       int
 	headBuckets int
 	puts        []fakeS3Put
@@ -53,15 +60,36 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case key == "" && r.Method == http.MethodGet:
 		f.lists++
-		prefix := r.URL.Query().Get("prefix")
+		q := r.URL.Query()
+		prefix, delimiter := q.Get("prefix"), q.Get("delimiter")
+		var keys []string
+		for k := range f.objects {
+			if strings.HasPrefix(k, prefix) && (delimiter == "" || !strings.Contains(k[len(prefix):], delimiter)) {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+		if n, err := strconv.Atoi(q.Get("max-keys")); err == nil && n < len(keys) {
+			keys = keys[:n]
+		}
 		w.Header().Set("Content-Type", "application/xml")
-		io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>bkt</Name>`)
-		if _, ok := f.objects[prefix]; ok {
-			io.WriteString(w, `<KeyCount>1</KeyCount><Contents><Key>`+prefix+`</Key></Contents>`)
-		} else {
-			io.WriteString(w, `<KeyCount>0</KeyCount>`)
+		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>bkt</Name><KeyCount>%d</KeyCount>`, len(keys))
+		for _, k := range keys {
+			fmt.Fprintf(w, `<Contents><Key>%s</Key><Size>%d</Size><LastModified>%s</LastModified></Contents>`,
+				k, len(f.objects[k]), f.modified[k].UTC().Format(time.RFC3339))
 		}
 		io.WriteString(w, `</ListBucketResult>`)
+	case key == "" && r.Method == http.MethodPost && r.URL.Query().Has("delete"):
+		var req struct {
+			Objects []struct{ Key string } `xml:"Object"`
+		}
+		xml.NewDecoder(r.Body).Decode(&req)
+		for _, o := range req.Objects {
+			delete(f.objects, o.Key)
+			f.deleted = append(f.deleted, o.Key)
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><DeleteResult></DeleteResult>`)
 	case r.Method == http.MethodGet || r.Method == http.MethodHead:
 		body, ok := f.objects[key]
 		if !ok {
@@ -78,6 +106,7 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPut:
 		body, _ := io.ReadAll(r.Body)
 		f.objects[key] = body
+		f.modified[key] = time.Now()
 		f.puts = append(f.puts, fakeS3Put{
 			Path:        key,
 			ACL:         r.Header.Get("X-Amz-Acl"),
@@ -100,7 +129,7 @@ func setupFakeS3(t *testing.T, region string) (*fakeS3, *S3Storage) {
 	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "none"))
 	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "none"))
 
-	fake := &fakeS3{region: region, objects: map[string][]byte{}}
+	fake := &fakeS3{region: region, objects: map[string][]byte{}, modified: map[string]time.Time{}}
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
 
@@ -114,59 +143,72 @@ func setupFakeS3(t *testing.T, region string) (*fakeS3, *S3Storage) {
 	return fake, s
 }
 
-func TestS3Upload(t *testing.T) {
+func TestS3Put(t *testing.T) {
 	fake, s := setupFakeS3(t, "")
-	hash := "0123456789abcdef0123456789abcdef"
+	key := dataKey(SumHash([]byte("hoge")))
 
-	if err := s.Upload("hoge", hash, []byte("hoge"), false); err != nil {
+	if err := s.Put(key, []byte("hoge"), false); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.puts) != 1 {
 		t.Fatalf("expect 1 put but %d", len(fake.puts))
 	}
 	put := fake.puts[0]
-	if put.Path != "data/01/23456789abcdef0123456789abcdef" || put.Body != "hoge" ||
+	if put.Path != key || put.Body != "hoge" ||
 		put.ACL != "bucket-owner-full-control" || put.ContentType != "binary/octet-stream" {
 		t.Errorf("invalid put %+v", put)
 	}
 
 	// 既に存在するなら送信しない
-	if err := s.Upload("hoge", hash, []byte("hoge"), false); err != nil {
+	if err := s.Put(key, []byte("hoge"), false); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.puts) != 1 {
 		t.Errorf("uploaded existing object")
 	}
 
-	// overwrite なら存在確認せずに送信する
-	lists := fake.lists
-	if err := s.Upload("hoge", hash, []byte("hoge"), true); err != nil {
+	// 名前の前方が一致するだけのものは、既にあるとみなさない
+	if err := s.Put(key[:len(key)-1], []byte("other"), false); err != nil {
 		t.Fatal(err)
 	}
-	if fake.lists != lists || len(fake.puts) != 2 {
+	if len(fake.puts) != 2 {
+		t.Errorf("prefix match must not be treated as existing")
+	}
+
+	// overwrite なら存在確認せずに送信する
+	lists := fake.lists
+	if err := s.Put(key, []byte("hoge"), true); err != nil {
+		t.Fatal(err)
+	}
+	if fake.lists != lists || len(fake.puts) != 3 {
 		t.Errorf("overwrite must put without list")
 	}
 }
 
-func TestS3UploadEmpty(t *testing.T) {
+func TestS3ListAndDelete(t *testing.T) {
 	fake, s := setupFakeS3(t, "")
+	for _, k := range []string{"tag/v1", "tag/v2", "data/aa/1", "data/bb/2"} {
+		if err := s.Put(k, []byte(k), true); err != nil {
+			t.Fatal(err)
+		}
+	}
 
-	if err := s.Upload("empty", "d41d8cd98f00b204e9800998ecf8427e", []byte{}, false); err != nil {
+	objects, err := s.List("tag/")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.puts) != 0 {
-		t.Errorf("empty file must not be uploaded")
+	if len(objects) != 2 || objects[0].Key != "tag/v1" || objects[1].Key != "tag/v2" || objects[0].Size != 6 || objects[0].LastModified.IsZero() {
+		t.Errorf("invalid list %+v", objects)
 	}
-}
 
-func TestS3UploadTag(t *testing.T) {
-	fake, s := setupFakeS3(t, "")
-
-	if err := s.UploadTag("v1", []byte("0123456789abcdef0123456789abcdef")); err != nil {
+	if err := s.Delete([]string{"data/aa/1", "data/nothing"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.puts) != 1 || fake.puts[0].Path != "tag/v1" || fake.puts[0].Body != "0123456789abcdef0123456789abcdef" {
-		t.Errorf("invalid put %+v", fake.puts)
+	if _, ok := fake.objects["data/aa/1"]; ok {
+		t.Errorf("data/aa/1 must be deleted")
+	}
+	if _, ok := fake.objects["data/bb/2"]; !ok {
+		t.Errorf("data/bb/2 must not be deleted")
 	}
 }
 
@@ -203,7 +245,7 @@ func TestS3RegionFromBucket(t *testing.T) {
 
 	// 判定したリージョンで署名すること
 	fake.signRegions = nil
-	if err := s.UploadTag("v1", []byte("x")); err != nil {
+	if err := s.Put("tag/v1", []byte("x"), true); err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range fake.signRegions {

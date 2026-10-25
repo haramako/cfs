@@ -118,12 +118,13 @@ func TestLoadDefaultOptionsEncryptKeyFromEnv(t *testing.T) {
 	defer func() { *Option = saved }()
 
 	config := filepath.Join(t.TempDir(), ".cfsenv")
-	if err := os.WriteFile(config, []byte(`{"EncryptKey": "key-in-file-123456789012345678901", "EncryptIv": "iv-in-file-12345"}`), 0666); err != nil {
+	if err := os.WriteFile(config, []byte(`{"EncryptKey": "key-in-file-123456789012345678901"}`), 0666); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Setenv("CFS_ENCRYPT_KEY", "")
-	t.Setenv("CFS_ENCRYPT_IV", "")
+	t.Setenv("CFS_OLD_ENCRYPT_KEYS", "")
+	t.Setenv("CFS_SIGNING_KEY", "")
 	if err := LoadDefaultOptions(config); err != nil {
 		t.Fatal(err)
 	}
@@ -132,12 +133,13 @@ func TestLoadDefaultOptionsEncryptKeyFromEnv(t *testing.T) {
 	}
 
 	t.Setenv("CFS_ENCRYPT_KEY", "key-in-env-1234567890123456789012")
-	t.Setenv("CFS_ENCRYPT_IV", "iv-in-env-123456")
+	t.Setenv("CFS_OLD_ENCRYPT_KEYS", "old-key-1-1234567890,old-key-2-1234567890")
+	t.Setenv("CFS_SIGNING_KEY", "signing-key")
 	if err := LoadDefaultOptions(config); err != nil {
 		t.Fatal(err)
 	}
-	if Option.EncryptKey != "key-in-env-1234567890123456789012" || Option.EncryptIv != "iv-in-env-123456" {
-		t.Errorf("environment variables must take precedence but %q / %q", Option.EncryptKey, Option.EncryptIv)
+	if Option.EncryptKey != "key-in-env-1234567890123456789012" || len(Option.OldEncryptKeys) != 2 || Option.SigningKey != "signing-key" {
+		t.Errorf("environment variables must take precedence but %q / %q / %q", Option.EncryptKey, Option.OldEncryptKeys, Option.SigningKey)
 	}
 
 	// .cfsenv がなくても環境変数は使われる
@@ -149,7 +151,7 @@ func TestLoadDefaultOptionsEncryptKeyFromEnv(t *testing.T) {
 		t.Errorf("EncryptKey must come from environment without .cfsenv but %q", Option.EncryptKey)
 	}
 
-	if strings.Contains(string(Option.maskedJSON()), "key-in-env") {
+	if s := string(Option.maskedJSON()); strings.Contains(s, "key-in-env") || strings.Contains(s, "old-key") || strings.Contains(s, "signing-key") {
 		t.Errorf("log must not contain the key: %s", Option.maskedJSON())
 	}
 }

@@ -45,7 +45,12 @@
 | `s3:ListBucket` | 同じ中身が既にあるかの確認（アップロード） |
 | `s3:PutObject` | ファイルとタグのアップロード |
 | `s3:PutObjectAcl` | アップロード時に `bucket-owner-full-control` の ACL を付けるため（ACL が無効なバケットでは不要な場合があります） |
-| `s3:GetObject` | S3 から直接ダウンロードするとき |
+| `s3:GetObject` | S3 から直接ダウンロードするとき、`upload` で前回のマニフェストを確かめるとき |
+| `s3:DeleteObject` | `cfs gc` と `cfs tag rm` |
+
+`cfs gc` は、`s3:ListBucket`、`s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` を使います。
+
+**バージョニングが有効なバケット**では、消しても「削除マーカー」が付くだけで容量は減りません。古いバージョンを消すライフサイクルルール（「以前のバージョンの有効期限」）を合わせて設定してください。
 
 ### リージョン
 

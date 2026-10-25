@@ -1,66 +1,40 @@
-# キャビネットの構成とマニフェスト形式
+# キャビネットの構成とマニフェスト形式（実装メモ）
 
-## 用語
+**形式の仕様そのものは人間向けの `docs/format.md` が正。** ここには実装の対応関係と、仕様に書かない勘所だけを書く。形式を変えたら `docs/format.md` を先に直す。
 
-| 用語 | 意味 |
+## 形式 v2（2026-10-25〜）の要点
+
+- ハッシュは SHA-256（`util.go` の `SumHash`、`HashLength = 64`）。`isHash` は 64 文字の小文字 16 進だけを受け付ける
+- 配置: `data/` 中身、`manifest/` マニフェスト、`tag/` タグ、`config.json` キャビネット設定、`gc/` GC の状態（`storage.go` の先頭コメント）。場所の組み立ては `dataKey` / `manifestKey` / `tagKey`
+- マニフェストは `#cfs-manifest 2` で始まる TSV（`manifest.go` の `Dump` / `Parse`）。署名は最後の `#signature ed25519 <鍵 ID> <署名>` 行
+- 暗号化は `crypt.go`。`EncryptKey` から HMAC-SHA256 で `enc_key` / `iv_key` / `key_id` を導出。暗号文は `[版 1B][鍵 ID 8B][IV 16B][AES-256-CTR]`。IV は `HMAC(iv_key, 平文)` の先頭 16 バイト（重複の排除のため中身から決める）
+- 署名は `signing.go`（Ed25519）。秘密鍵は環境変数 `CFS_SIGNING_KEY` だけから読む（`OptionInfo.SigningKey` は `json:"-"`）。公開鍵は `.cfsenv` の `VerifyKeys`
+- `Downloader.fetchObject` は取得したバイト列の SHA-256 を必ず確かめる（手元のキャッシュが壊れていたら取り直す）
+- v1 との互換性はない（オーナー指示で互換性は当面不要）
+
+## コードの対応
+
+| 役割 | 場所 |
 |---|---|
-| キャビネット (cabinet) | アップロード先のストレージ全体。`.cfsenv` の `Cabinet` に URL で指定 |
-| マニフェスト (manifest) | 1 回のアップロードで得られるファイル一覧。2026-10-25 に「バケット」から改名（S3 のバケットとまぎらわしいため） |
-| タグ (tag) | マニフェストハッシュへの名前付きポインタ（git のブランチ/タグに相当） |
-| location | CLI で「どのマニフェストか」を指す引数。タグ名またはマニフェストハッシュ（32 桁 hex） |
+| キャビネットへの書き込み・一覧・削除 | `Storage`（`Put` / `Exists` / `List` / `Delete`）: `FileStorage`、`S3Storage`、`DummyStorage`（テスト用） |
+| キャビネットからの読み込み | `Fetcher`（`Open` / `Exists`）: `fileFetcher`、`httpFetcher`、`S3Storage`、`DummyStorage` |
+| アップロード | `Client`（`Init` で鍵と署名鍵を読む。`Upload` → 0 バイト以外を `data/` に Put。`UploadManifest` → `manifest/` に Put、手元キャッシュと `.hash`、タグ） |
+| 手元キャッシュの信用 | `Manifest.ValidateCache`（前回のマニフェストが `manifest/` にあるか 1 回確かめる。`cmd/cfs/main.go` の `doUpload` から呼ぶ） |
+| ダウンロード | `Downloader`（`ResolveLocation` → `LoadManifest` → `Fetch`） |
+| GC・タグ・キャビネット設定 | `gc.go`（`RunGC`、`ListTags`、`DeleteTags`、`LoadCabinetConfig` / `SaveCabinetConfig`、`ValidateTagName`） |
 
-## キャビネット上の配置
-
-```
-<cabinet>/
-  data/
-    c5/9548c3c576228486a1f0037eb16a1b   # コンテンツデータ（ハッシュの先頭2文字/残り30文字）
-    ...                                 # マニフェスト自体もここに置かれる
-  tag/
-    <tag名>                             # 中身はマニフェストハッシュ 32 文字のプレーンテキスト
-```
-
-- `data/` 以下は **内容アドレス**: 同じパスの中身は二度と変わらないので、HTTP プロキシや CDN で安全にキャッシュできる
-- `tag/` 以下は上書きされるのでキャッシュしてはいけない
-- 使われなくなった `data/` を消すガーベージコレクトは未実装（README の TODO に残っている）
-
-### バックエンドごとの URL
+## バックエンドごとの実装
 
 | スキーム | 書き込み | 読み込み | 認証 |
 |---|---|---|---|
-| `file:///path` やパス | ローカルファイル書き込み | ファイルを直接読む（`fileFetcher`） | なし |
-| `s3://<bucket>` | aws-sdk-go-v2 で PutObject（ACL `bucket-owner-full-control`、既存チェックに ListObjectsV2） | GetObject / HeadObject（`S3Storage` が `Fetcher` も実装） | SDK 標準の認証チェーン（環境変数・共有設定・SSO・IAM ロール） |
+| `file:///path` やパス | `FileStorage`（`atomic.WriteFile`） | `fileFetcher`（ファイルを直接読む） | なし |
+| `s3://<bucket>` | `S3Storage`（PutObject、ACL `bucket-owner-full-control`、既存確認に ListObjectsV2、DeleteObjects は 1000 件ずつ） | `S3Storage`（GetObject / HeadObject） | SDK 標準の認証チェーン |
+| `http(s)://` | なし（読み込み専用） | `httpFetcher` | なし |
 
-S3 のリージョンは自動判定（詳細は known-issues-and-gotchas.md の S3 の項）。チェックサムは「必要な場合のみ」に設定して、旧実装と同じ素の PutObject にしている。認証情報は実際のリクエスト時まで検証されない（旧 goamz 実装は環境変数がないと `NewS3Storage` の時点でエラーだった）。`cfs://`（旧サーバー `cfssv`）は 2019-08 に削除済みで、`StorageFromUrl` も対応していない。
+`gs://` は 2026-10-25 に外した（`StorageFromUrl` が「未対応」のエラーを返す）。
 
-## ハッシュ
+## 圧縮・暗号化の属性
 
-- アルゴリズムは MD5（`Manifest.HashType = "md5"`、`sha1` は未対応で panic）
-- `Hash`: **ストレージに置かれるバイト列（圧縮・暗号化後）** の MD5。`data/` のパスはこちら
-- `OrigHash`: 元ファイルの MD5。変更検出、`ls` 表示、パックファイルに使う
-- 圧縮も暗号化もしないファイルは `Hash == OrigHash`
-
-## マニフェストの形式
-
-改行区切りの TSV。各行 7 列、パス順にソート（`Manifest.Dump`）。
-
-| 列 | 内容 |
-|---|---|
-| 0 | `Hash`（格納データの MD5） |
-| 1 | `Path`（`/` 区切りの相対パス。`Flatten` 時はファイル名のみ） |
-| 2 | `Size`（格納データのバイト数） |
-| 3 | `Time`（mtime、RFC3339） |
-| 4 | `OrigHash` |
-| 5 | `OrigSize` |
-| 6 | `Attr`（`ContentAttribute`: bit0=圧縮, bit1=暗号） |
-
-マニフェスト自体も `DefaultContentAttribute()` でエンコードして `data/` に格納される。ローカルキャッシュ（`~/.cfs/cache/…`）にはエンコード前の TSV が書かれる。
-
-## 暗号化と圧縮
-
-- エンコード順: **zlib 圧縮 → AES-CFB 暗号化**。デコードはその逆（`util.go`）
-- 鍵・IV は `.cfsenv` の `EncryptKey`（16/24/32 バイト）と `EncryptIv`（16 バイト）。`EncryptKey` が空なら暗号化しない
-- ファイルごとの属性は `Manifest.GetAttribute` で決まる
-  - 既定: `Compress` が true なら圧縮、`EncryptKey` があれば暗号化
-  - 拡張子 `.ab` `.raw` `.pbx` `.mp4` は **常に無圧縮・無暗号**（Unity AssetBundle や動画など、容量が大きく既に圧縮済みのもの向け。AssetBundle はクライアントでの復号コストが高いため意図的に無暗号、とオーナーに確認済み 2026-10-25）。コード上にハードコードされており、README にある「`.cfsenv` で指定」は未実装
-- 属性はマニフェストの各行に保存されるので、ダウンロード側はファイルごとに正しくデコードできる。ただし **マニフェスト自体のデコードはダウンロード側の `Option`（`DefaultContentAttribute()`）に依存** するため、アップロード側と同じ `Compress`/`EncryptKey` 設定が必要
+- ファイルごとの属性は `Manifest.GetAttribute` で決まる（既定: `Compress` なら圧縮、`EncryptKey` があれば暗号化）
+- 拡張子 `.ab` `.raw` `.pbx` `.mp4` は **常に無圧縮・無暗号**（AssetBundle はクライアントでの復号コストが高いため意図的に無暗号、とオーナーに確認済み 2026-10-25）。コード上にハードコード
+- マニフェスト自体は `DefaultContentAttribute()` で置く。読む側も同じ設定が必要（GC だけは `decodeManifest` で 4 通りの属性を試して読む）
