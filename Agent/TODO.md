@@ -10,6 +10,6 @@
 
 ## Items
 
-- [ ] 暗号化を改善する（ファイル一覧への署名、ファイルごとの IV など）。計画は [discussions/2026-10-25-encryption-improvement-plan.md](discussions/2026-10-25-encryption-improvement-plan.md)。先に「`.ab` が無暗号なのは意図的か」をオーナーに確認する (2026-10-25)
+- [ ] 暗号化を改善する（ファイル一覧への署名、ファイルごとの IV など）。計画は [discussions/2026-10-25-encryption-improvement-plan.md](discussions/2026-10-25-encryption-improvement-plan.md)。`.ab` が無暗号なのは意図的（実行時の復号コストのため）と確認済み。A（署名）→ C（IV）の順 (2026-10-25)
 - [ ] 暗号鍵を環境変数（例: `CFS_ENCRYPT_KEY`）で上書きできるようにする。計画は [discussions/2026-10-25-encrypt-key-env-override-plan.md](discussions/2026-10-25-encrypt-key-env-override-plan.md) (2026-10-25)
 - [ ] S3 から HTTP 公開なしで sync できるようにする。計画は [discussions/2026-10-25-s3-direct-sync-plan.md](discussions/2026-10-25-s3-direct-sync-plan.md)。オーナーの追加相談を受けてから実装する (2026-10-25)

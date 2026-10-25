@@ -63,5 +63,5 @@ S3 のリージョンは `ap-northeast-1` 固定（`AWS_REGION` より優先）�
 - 鍵・IV は `.cfsenv` の `EncryptKey`（16/24/32 バイト）と `EncryptIv`（16 バイト）。`EncryptKey` が空なら暗号化しない
 - ファイルごとの属性は `Bucket.GetAttribute` で決まる
   - 既定: `Compress` が true なら圧縮、`EncryptKey` があれば暗号化
-  - 拡張子 `.ab` `.raw` `.pbx` `.mp4` は **常に無圧縮・無暗号**（Unity AssetBundle や動画など、既に圧縮済みで生のまま配信したいもの向け）。コード上にハードコードされており、README にある「`.cfsenv` で指定」は未実装
+  - 拡張子 `.ab` `.raw` `.pbx` `.mp4` は **常に無圧縮・無暗号**（Unity AssetBundle や動画など、容量が大きく既に圧縮済みのもの向け。AssetBundle はクライアントでの復号コストが高いため意図的に無暗号、とオーナーに確認済み 2026-10-25）。コード上にハードコードされており、README にある「`.cfsenv` で指定」は未実装
 - 属性はバケットの各行に保存されるので、ダウンロード側はファイルごとに正しくデコードできる。ただし **バケット自体のデコードはダウンロード側の `Option`（`DefaultContentAttribute()`）に依存** するため、アップロード側と同じ `Compress`/`EncryptKey` 設定が必要
