@@ -375,7 +375,7 @@ func TestCLIErrors(t *testing.T) {
 		{[]string{"-c", c.cabinet, "cabinet", "config", "set", "unknown", "x"}, "unknown cabinet config key"},
 		{[]string{"-c", c.cabinet, "gc", "--retention", "bad"}, "invalid"},
 		{[]string{"ls", "v1"}, "no cabinet"},
-		{[]string{"-c", "s3:", "upload", "src"}, ""},
+		{[]string{"-c", "gs://bucket", "upload", "src"}, "not supported"},
 		{[]string{"unpack", "none.tp"}, ""},
 		{[]string{"-c", c.cabinet, "--filter-cmd", "cfs-no-such-command", "sync", "v1", "out"}, "filter command"},
 		{[]string{"-c", c.cabinet, "--filter-cmd", `"unclosed`, "sync", "v1", "out"}, "unclosed quote"},
