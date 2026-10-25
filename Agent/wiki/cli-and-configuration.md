@@ -4,7 +4,7 @@
 
 ## コマンドの定義場所
 
-- `cmd/cfs/main.go` の `app.Commands` が一覧。`upload` / `sync` / `merge` / `cat` / `ls` / `config` / `setting` は `main.go`、`http` は `cmd_http.go`、`pack` 系は `cmd_pack*.go` / `cmd_unpack.go` / `cmd_patch.go`、`gc` / `tag` / `cabinet` / `keygen` は `cmd_cabinet.go`
+- `cmd/cfs/main.go` の `app.Commands` が一覧。`upload` / `sync` / `merge` / `cat` / `ls` / `config` / `setting` は `main.go`、`serve` は `cmd_serve.go`、`pack` 系は `cmd_pack*.go` / `cmd_unpack.go` / `cmd_patch.go`、`gc` / `tag` / `cabinet` / `keygen` は `cmd_cabinet.go`
 - CLI は urfave/cli v3。コマンドのフラグは引数の後ろにも書ける（`cfs upload src -t v1`）。グローバルオプションもサブコマンドの後ろに書ける（`cfs upload -V src`）。サブコマンドの入れ子（`tag ls`、`cabinet config set`）は `Commands` で書く
 - 各コマンドの先頭で `loadConfig` を呼ぶ: `InitDefaultSetting` → `-V` → `LoadDefaultOptions`（`.cfsenv` → 環境変数）→ `--cabinet` / `--url`（今いるフォルダ基準で `ResolveLocation`）→ `--force`
 - エラーの多くは `check(err)` で panic する（スタックトレースが出る）。利用者向けのエラー（タグ名、設定の誤りなど）は `fmt.Println` + `os.Exit(1)`
@@ -26,12 +26,15 @@
 
 `~/.cfs` の場所は `~/.cfs_setting`（YAML）の `HomeRoot` で変えられる（`config.go`）。
 
-## `http` サーバー（`cmd/cfs/cmd_http.go`）
+## `serve`（`cmd/cfs/cmd_serve.go`。2026-10-25 に `http` から改名・作り直し）
 
-- タグはサブドメイン（`<tag>.example.com`、ただし `cfs.` は無視）か、パスの先頭要素（`/<tag>/path`）から取る
-- ファイルがあれば返し、なければ `index.html`、それもなければディレクトリ一覧を返す
-- ダウンロード元は `getDownloaderURL()`（`Url`、なければキャビネット）
-- 公開向けではない（XSS、panic、localhost 固定、毎回マニフェストを取り直す）。`../discussions/2026-10-25-public-serve-plan.md` で `cfs serve` として作り直す予定
+- 用途は HTML などのアーティファクトの閲覧。認証は持たず、公開時は oauth2-proxy を前に置く前提（`../discussions/2026-10-25-public-serve-plan.md`）
+- `server` 構造体が `http.Handler`。タグ → ハッシュは `--tag-ttl`（既定 30 秒）だけ覚え、ハッシュ → マニフェストは 64 件の LRU（`lruCache`）に置く。`Downloader` は起動時に 1 つ作って使い回す
+- タグはサブドメイン（`<tag>.example.com`、ただし `cfs.` は無視）か、パスの先頭要素（`/<tag>/path`）から取る（`getTagAndPath`）。`ValidateTagName` を通らないものは 404。64 桁 hex はマニフェストのハッシュとして扱い、`Cache-Control: immutable` を付ける
+- ファイルは `http.ServeContent` で返す（`ETag` = `OrigHash`、`If-None-Match` → 304、`Range`）。中身は一度メモリに読む（ストリーミングは未対応。計画では後回し）
+- ディレクトリ一覧は `html/template` で書く（ファイル名をエスケープ）。`.htm` の Shift_JIS 特別扱いはやめた
+- エラーは panic せず 404 / 500。アクセスログは `log.Printf`（`X-Forwarded-Email` があれば出す）
+- `http.Server` のタイムアウト: `ReadHeaderTimeout` 10 秒、`ReadTimeout` 30 秒、`IdleTimeout` 2 分（大きいファイルのために `WriteTimeout` は付けていない）
 
 ## `--filter-cmd`（`cmd/cfs/filter.go`）
 

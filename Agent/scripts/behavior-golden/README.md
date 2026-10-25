@@ -20,7 +20,7 @@ diff /tmp/old.txt /tmp/new.txt
 ## 前提
 
 - Git Bash（`cygpath`, `touch -d`, `md5sum`, `curl`, `grep`）と Go
-- ポート 18764（キャビネット配信用の `static-server/`）と 18765（`cfs http`）が空いていること
+- ポート 18764（キャビネット配信用の `static-server/`）と 18765（`cfs serve`）が空いていること
 - ホームディレクトリは作業ディレクトリ内の `home/` に差し替えるので、実際の `~/.cfs` は汚さない
 
 ## 記録する内容
@@ -29,7 +29,7 @@ diff /tmp/old.txt /tmp/new.txt
 - `upload`（初回・変更なし・変更あり・`-f`・引数の後ろのフラグ）、`ls`（タグ・ハッシュ・`--verify`）、`cat`、`merge`、`sync`（`--filter-cmd` 含む）、エラーケース
 - `pack` / `unpack` / `pack-manifest` / `patch` の一覧とファイルの md5
 - キャビネット・`~/.cfs`・出力ディレクトリの全ファイルの md5
-- `cfs http` のレスポンス（ファイル・ディレクトリ一覧・リダイレクト）
+- `cfs serve` のレスポンス（ファイル・ディレクトリ一覧・リダイレクト）
 
 ## 制約
 

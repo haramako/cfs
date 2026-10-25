@@ -150,8 +150,8 @@ echo "### keygen lines" >&3
 "$CFS" keygen | grep -c '^CFS_SIGNING_KEY=\|"VerifyKeys"' >&3
 run upload -t feature/foo src
 
-# http サーバー
-"$CFS" http -p 18765 >http.log 2>&1 &
+# serve（HTTP サーバー）
+"$CFS" serve --listen 127.0.0.1:18765 >http.log 2>&1 &
 HTTP_PID=$!
 for i in $(seq 1 50); do curl -s -o /dev/null http://localhost:18765/v1/a.txt && break; sleep 0.2; done
 for p in /v1/a.txt /v1/sub/ /v1/sub "/v1/sub/deep/d.txt"; do

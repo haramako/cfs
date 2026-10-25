@@ -71,7 +71,7 @@ func main() {
 		lsCommand,
 		configCommand,
 		settingCommand,
-		httpCommand,
+		serveCommand,
 		packCommand,
 		unpackCommand,
 		packManifestCommand,

@@ -23,9 +23,11 @@
 | `config.go` `GlobalCacheDir` / `GlobalDataCacheDir` / `GlobalSettingPath` | 関数内で `globalCacheDir := ...` と書いておりパッケージ変数をシャドーしているため、結果がキャッシュされない。呼ぶたびに `InitDefaultSetting` が `~/.cfs_setting` を読み直す（`Fetch` はファイルごとに呼ぶので無駄が大きい）。直すとテストが使うホームフォルダの扱いが変わるので、2026-10-25 は見送った |
 | `cmd/cfs/main.go` | `--setting` は未使用 |
 | `internal/pack/pack.go` | パス長は 1 バイトなので 255 バイト超のパスは壊れる |
-| `cmd/cfs/cmd_http.go` | 公開向けではない（XSS、panic、待ち受けが localhost 固定、毎回マニフェストを取り直す）。`../discussions/2026-10-25-public-serve-plan.md` で対応予定 |
+| `cmd/cfs/cmd_serve.go` | ファイルを一度メモリに読んでから返す（ストリーミング未対応）。大きいファイルを多数同時に返すとメモリを使う。計画では後回し |
 
 ## 2026-10-25 に直したもの（参考）
+
+- `cfs http` の XSS、panic、localhost 固定、毎回のマニフェスト取得（`cfs serve` として作り直した）
 
 - `FileStorage` の既存確認が常に失敗して上書きしていた
 - `encode` が引数の鍵を無視していた／IV が全ファイル共通だった（形式 v2 で暗号化を作り直した）
