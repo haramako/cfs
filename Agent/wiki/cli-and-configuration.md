@@ -13,7 +13,7 @@ CLI は urfave/cli v3。v1 時代と同じく、コマンドのフラグは引�
 | `--setting, -S` | `.cfs_setting` | **定義のみで未使用**（実際は常に `~/.cfs_setting`） |
 | `--cabinet, -c` | — | `Option.Cabinet` を上書き（URL かパス） |
 | `--url` | — | `Option.Url` を上書き（URL かパス） |
-| `--force, -f` | false | ローカルのバケットキャッシュを使わずに全ファイルを再判定（`Option.NoCache`） |
+| `--force, -f` | false | ローカルのマニフェストのキャッシュを使わずに全ファイルを再判定（`Option.NoCache`） |
 | `--filter-cmd` | — | ファイル絞り込み用の外部コマンド（後述） |
 
 `--url`（2026-10-25 に定義）でダウンロード元を上書きできる。`--cabinet` / `--url` の相対パスは今いるフォルダ基準、`.cfsenv` の `Cabinet` / `Url` の相対パスは `.cfsenv` のあるフォルダ基準（`ResolveLocation`）。Windows の `C:hoge` 形はエラー。
@@ -22,24 +22,24 @@ CLI は urfave/cli v3。v1 時代と同じく、コマンドのフラグは引�
 
 | コマンド | 引数 | 内容 |
 |---|---|---|
-| `upload` | `[-t tag] [-b bucket-file] [-o hash-out] [dir ...]` | ディレクトリをアップロード。dir 省略時は `.`。`-o` でバケットハッシュをファイルに書き出す |
-| `sync` | `location output-dir` | バケットの全ファイルを出力先へ書き出す |
-| `merge` | `[-o hash-out] output-tag location [...]` | 複数バケットをマージして新しいバケット/タグを作る。後ろの location が優先。データは再アップロードしない |
+| `upload` | `[-t tag] [-m manifest-file] [-o hash-out] [dir ...]` | ディレクトリをアップロード。dir 省略時は `.`。`-o` でマニフェストハッシュをファイルに書き出す |
+| `sync` | `location output-dir` | マニフェストの全ファイルを出力先へ書き出す |
+| `merge` | `[-o hash-out] output-tag location [...]` | 複数マニフェストをマージして新しいマニフェスト/タグを作る。後ろの location が優先。データは再アップロードしない |
 | `cat` | `location filename` | 1 ファイルを標準出力へ（デバッグ用） |
 | `ls` | `[--verify] location` | ファイル一覧（パス, OrigHash, OrigSize, 時刻）。`--verify` で各データの存在を 32 並列の HEAD で確認し ok/ng を表示 |
 | `config` | — | 現在の Cabinet とダウンロード URL を表示 |
 | `setting` | — | 現在の `HomeRoot` を表示 |
-| `http` | `[-p port]` | バケットの中身を閲覧できる HTTP サーバー（`localhost:8000`） |
+| `http` | `[-p port]` | マニフェストの中身を閲覧できる HTTP サーバー（`localhost:8000`） |
 | `pack` | `packfile dir` | ディレクトリをパックファイル化 |
 | `unpack` | `packfile [-o dir]` | パックファイルを展開。`-o` なしなら一覧表示 |
-| `pack-bucket` | `location packfile` | バケットの中身をダウンロードしてパックファイル化 |
+| `pack-manifest` | `location packfile` | マニフェストの中身をダウンロードしてパックファイル化 |
 | `patch` | `base.tp current.tp output.tp` | 2 つのパックの差分パックを作る |
 
 pack 系の詳細は [pack-format.md](pack-format.md)。
 
 ### `--filter-cmd`
 
-`sync` / `merge` / `pack` / `unpack` / `pack-bucket` で使える。ファイルパスを改行区切りで外部コマンドの標準入力へ渡し、標準出力に返ってきた行のファイルだけを残す（`cmd/cfs/filter.go`）。コマンド文字列は単純に空白で分割されるので、引数のクォートはできない。
+`sync` / `merge` / `pack` / `unpack` / `pack-manifest` で使える。ファイルパスを改行区切りで外部コマンドの標準入力へ渡し、標準出力に返ってきた行のファイルだけを残す（`cmd/cfs/filter.go`）。コマンド文字列は単純に空白で分割されるので、引数のクォートはできない。
 
 ### `http` サーバー
 
@@ -90,7 +90,7 @@ HomeRoot: D:/somewhere
 
 | パス | 内容 |
 |---|---|
-| `~/.cfs/cache/<md5>` | `upload` 時のバケットキャッシュ。名前は `Cabinet$cwd$絶対パス...` をエスケープして MD5 したもの。同じ場所に `<md5>.hash` も置かれる |
+| `~/.cfs/cache/<md5>` | `upload` 時のマニフェストのキャッシュ。名前は `Cabinet$cwd$絶対パス...` をエスケープして MD5 したもの。同じ場所に `<md5>.hash` も置かれる |
 | `~/.cfs/datacache/<hash>` | ダウンロードしたデータ（エンコード済みのまま）。消しても再取得されるだけ |
 
-`-b` でバケットファイルを明示すると、キャッシュディレクトリの代わりにそこを使う。
+`-m` でマニフェストファイルを明示すると、キャッシュディレクトリの代わりにそこを使う。

@@ -12,9 +12,9 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 
 | パス（`internal/cfs/` 内） | 役割 |
 |---|---|
-| `bucket.go` | `Bucket`（ファイル一覧＝マニフェスト）と `Content`（1 ファイル分のメタ）、`ContentAttribute`（圧縮/暗号フラグ）、バケットの TSV シリアライズ |
-| `client.go` | アップロード側。ディレクトリ走査 → 変更検出 → エンコード → ワーカーで並列アップロード → バケット/タグのアップロード |
-| `downloader.go` | ダウンロード側。タグ解決 → バケット取得 → データ取得（ローカルキャッシュ経由）→ デコード |
+| `manifest.go` | `Manifest`（ファイル一覧。2026-10-25 に Bucket から改名）と `Content`（1 ファイル分のメタ）、`ContentAttribute`（圧縮/暗号フラグ）、マニフェストの TSV シリアライズ |
+| `client.go` | アップロード側。ディレクトリ走査 → 変更検出 → エンコード → ワーカーで並列アップロード → マニフェスト/タグのアップロード |
+| `downloader.go` | ダウンロード側。タグ解決 → マニフェスト取得 → データ取得（ローカルキャッシュ経由）→ デコード |
 | `storage.go` | `Storage` インターフェースと URL スキームからの生成（`file://` / `s3://`。`gs://` は 2026-10-25 に外した） |
 | `file_storage.go` / `s3_storage.go` | 各バックエンドの書き込み実装 |
 | `dummy_storage.go` | テスト用のメモリ内ストレージ |
@@ -37,28 +37,28 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 
 ## アップロードの流れ（`cfs upload`）
 
-1. `.cfsenv` を読み、ローカルのバケットキャッシュ（前回アップロード時のマニフェスト）を `~/.cfs/cache/<md5>` からロード
+1. `.cfsenv` を読み、ローカルのマニフェストのキャッシュ（前回アップロード時のマニフェスト）を `~/.cfs/cache/<md5>` からロード
 2. `Client.AddFiles` で対象ディレクトリを走査（除外ルールは [known-issues-and-gotchas.md](known-issues-and-gotchas.md) 参照）
 3. `Client.AddFile` で変更検出
    - 前回の `Time + 1秒` 以前の mtime かつサイズ一致 → 読まずにスキップ
    - 読み込んで MD5（`OrigHash`）が一致 → 時刻だけ更新
    - それ以外 → `encode`（圧縮→暗号化）してキューに積む
 4. 32 並列の `uploadWorker` が `Storage.Upload` を呼ぶ（既存ハッシュはバックエンド側でスキップ）
-5. `RemoveUntouched` で今回見つからなかったエントリを削除（バケット＝ディレクトリの完全なスナップショット）
-6. `Client.Finish` → `UploadBucket`: バケット自体もエンコードして `data/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
+5. `RemoveUntouched` で今回見つからなかったエントリを削除（マニフェスト＝ディレクトリの完全なスナップショット）
+6. `Client.Finish` → `UploadManifest`: マニフェスト自体もエンコードして `data/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
 
 ## ダウンロードの流れ（`cfs sync`）
 
-1. `location` が 32 桁 hex ならバケットハッシュ、そうでなければタグ名として `tag/<name>` を GET してハッシュを得る
-2. バケット本体を `Fetch`（`DefaultContentAttribute()` でデコード）→ TSV をパース
+1. `location` が 32 桁 hex ならマニフェストハッシュ、そうでなければタグ名として `tag/<name>` を GET してハッシュを得る
+2. マニフェスト本体を `Fetch`（`DefaultContentAttribute()` でデコード）→ TSV をパース
 3. 必要なら `--filter-cmd` でファイルを絞り込む
 4. 各 `Content` を `Fetch`。`~/.cfs/datacache/<hash>` にあればそれを使い、なければダウンロードしてキャッシュ（キャッシュはエンコード済みのまま保存）→ デコードして出力先に atomic write
 
-更新がなければ、タグ（32 バイトのハッシュ）とバケットの取得だけで終わる、というのが速度面の売り。
+更新がなければ、タグ（32 バイトのハッシュ）とマニフェストの取得だけで終わる、というのが速度面の売り。
 
 ## 関連記事
 
-- [storage-layout-and-bucket-format.md](storage-layout-and-bucket-format.md) — キャビネット上の配置とバケット形式、暗号化/圧縮
+- [storage-layout-and-manifest-format.md](storage-layout-and-manifest-format.md) — キャビネット上の配置とマニフェスト形式、暗号化/圧縮
 - [cli-and-configuration.md](cli-and-configuration.md) — コマンドと設定ファイル
 - [pack-format.md](pack-format.md) — パックファイルとパッチ
 - [development-build-and-ci.md](development-build-and-ci.md) — ビルド・テスト・リリース

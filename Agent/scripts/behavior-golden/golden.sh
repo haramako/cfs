@@ -125,7 +125,7 @@ run unpack p1.tp
 run unpack p1.tp -o out-unpack
 dump out-unpack
 run -o out-unpack2 unpack p1.tp
-run pack-bucket v1 pb1.tp
+run pack-manifest v1 pb1.tp
 run unpack pb1.tp
 run patch pb1.tp p1.tp patch.tp
 run unpack patch.tp

@@ -263,9 +263,9 @@ func TestS3RoundTrip(t *testing.T) {
 	addFile(src, "sub/b.raw", "raw data")
 	addFile(src, "empty", "")
 
-	bucket := NewBucket()
-	bucket.Tag = "v1"
-	client := &Client{Bucket: bucket, Storage: s}
+	manifest := NewManifest()
+	manifest.Tag = "v1"
+	client := &Client{Manifest: manifest, Storage: s}
 	client.Init()
 	if err := client.AddFiles(src); err != nil {
 		t.Fatal(err)
@@ -275,7 +275,7 @@ func TestS3RoundTrip(t *testing.T) {
 	}
 
 	d := &Downloader{fetcher: s}
-	loaded, err := d.LoadBucket("v1")
+	loaded, err := d.LoadManifest("v1")
 	if err != nil {
 		t.Fatal(err)
 	}

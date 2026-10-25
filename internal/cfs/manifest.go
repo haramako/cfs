@@ -17,8 +17,8 @@ var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
 // Verbose 詳細なログを表示するかどうか
 var Verbose = false
 
-// Bucket バケット
-type Bucket struct {
+// Manifest マニフェスト
+type Manifest struct {
 	Tag         string
 	Path        string
 	Hash        string
@@ -73,15 +73,15 @@ func (c ContentAttribute) Crypted() bool {
 	return (int(c) & Crypted) != 0
 }
 
-func NewBucket() *Bucket {
-	return &Bucket{
+func NewManifest() *Manifest {
+	return &Manifest{
 		Contents: make(map[string]Content),
 		HashType: "md5",
 	}
 }
 
-func BucketFromFile(path string) (*Bucket, error) {
-	b := &Bucket{
+func ManifestFromFile(path string) (*Manifest, error) {
+	b := &Manifest{
 		Path:     path,
 		Contents: make(map[string]Content),
 		HashType: "md5",
@@ -89,7 +89,7 @@ func BucketFromFile(path string) (*Bucket, error) {
 	data, err := os.ReadFile(filepath.FromSlash(path))
 	if err == nil {
 		if Verbose {
-			fmt.Printf("read bucket from '%s'\n", b.Path)
+			fmt.Printf("read manifest from '%s'\n", b.Path)
 		}
 		err := b.Parse(data)
 		if err != nil {
@@ -100,7 +100,7 @@ func BucketFromFile(path string) (*Bucket, error) {
 
 }
 
-func (b *Bucket) Parse(s []byte) error {
+func (b *Manifest) Parse(s []byte) error {
 	for _, line := range strings.Split(string(s), "\n") {
 		if len(s) != 0 {
 			col := strings.Split(line, "\t")
@@ -138,13 +138,13 @@ func (b *Bucket) Parse(s []byte) error {
 
 // Merge bにfromの内容をマージする
 // 両方に存在する場合は、fromの内容で上書きされる
-func (b *Bucket) Merge(from *Bucket) {
+func (b *Manifest) Merge(from *Manifest) {
 	for _, c := range from.Contents {
 		b.Contents[c.Path] = c
 	}
 }
 
-func (b *Bucket) Sum(data []byte) string {
+func (b *Manifest) Sum(data []byte) string {
 	switch b.HashType {
 	case "sha1":
 		panic("not supported")
@@ -156,7 +156,7 @@ func (b *Bucket) Sum(data []byte) string {
 	}
 }
 
-func (b *Bucket) RemoveUntouched() {
+func (b *Manifest) RemoveUntouched() {
 	newContents := make(map[string]Content)
 	for _, c := range b.Contents {
 		if c.Touched {
@@ -170,8 +170,8 @@ func (b *Bucket) RemoveUntouched() {
 	b.Contents = newContents
 }
 
-// Dump は、Bucketの内容をダンプする
-func (b *Bucket) Dump() string {
+// Dump は、Manifestの内容をダンプする
+func (b *Manifest) Dump() string {
 	keys := []string{}
 	for k := range b.Contents {
 		keys = append(keys, k)
@@ -198,7 +198,7 @@ func (b *Bucket) Dump() string {
 
 	return strings.Join(r, "\n") + "\n"
 }
-func (b *Bucket) GetAttribute(path string) ContentAttribute {
+func (b *Manifest) GetAttribute(path string) ContentAttribute {
 	var attr = DefaultContentAttribute()
 	// TODO: とりあえずフィルタを固定している
 	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" || filepath.Ext(path) == ".pbx" || filepath.Ext(path) == ".mp4" {

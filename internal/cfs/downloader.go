@@ -26,9 +26,9 @@ func NewDownloader(location string) (*Downloader, error) {
 	return &Downloader{fetcher: fetcher}, nil
 }
 
-func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
+func (d *Downloader) LoadManifest(location string) (*Manifest, error) {
 
-	b := &Bucket{
+	b := &Manifest{
 		Contents: make(map[string]Content),
 		HashType: "md5",
 	}
@@ -58,7 +58,7 @@ func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
 	return b, nil
 }
 
-func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
+func (d *Downloader) ExistsAll(b *Manifest) (map[string]bool, error) {
 	result := map[string]bool{}
 	mutex := sync.Mutex{}
 
@@ -92,7 +92,7 @@ func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
 	return result, nil
 }
 
-func (d *Downloader) Sync(b *Bucket, dir string) error {
+func (d *Downloader) Sync(b *Manifest, dir string) error {
 	for _, c := range b.Contents {
 		if Verbose {
 			fmt.Printf("downloading %s\n", c.Path)
@@ -121,7 +121,7 @@ func (d *Downloader) Sync(b *Bucket, dir string) error {
 	return nil
 }
 
-func (d *Downloader) FetchAll(b *Bucket) error {
+func (d *Downloader) FetchAll(b *Manifest) error {
 	const RETRY_LIMIT = 3
 	limit := make(chan struct{}, 8)
 	eg, ctx := errgroup.WithContext(context.Background())

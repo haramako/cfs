@@ -13,7 +13,7 @@ import (
 	"github.com/haramako/cfs/internal/pack"
 )
 
-func filterBucket(cmd string, b *cfs.Bucket) (*cfs.Bucket, error) {
+func filterManifest(cmd string, b *cfs.Manifest) (*cfs.Manifest, error) {
 	if cmd == "" {
 		return b, nil
 	}
@@ -40,7 +40,7 @@ func filterBucket(cmd string, b *cfs.Bucket) (*cfs.Bucket, error) {
 	}
 	entries = newEntries
 
-	return &cfs.Bucket{
+	return &cfs.Manifest{
 		HashType: "md5",
 		Contents: entries,
 		Tag:      b.Tag,

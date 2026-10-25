@@ -64,7 +64,7 @@ func getTagAndPath(host string, urlPath string) (tag string, path string) {
 	return
 }
 
-func getDirectoryContentList(b *cfs.Bucket, path string) []cfs.Content {
+func getDirectoryContentList(b *cfs.Manifest, path string) []cfs.Content {
 	list := []cfs.Content{}
 	if path != "" {
 		path = path + "/"
@@ -132,7 +132,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	bucket, err := downloader.LoadBucket(location)
+	manifest, err := downloader.LoadManifest(location)
 	if err != nil {
 		panic(err)
 	}
@@ -142,7 +142,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		path = strings.TrimRight(path, "/")
 	}
 
-	content, ok := bucket.Contents[path]
+	content, ok := manifest.Contents[path]
 	if ok {
 		renderFile(w, downloader, content)
 		return
@@ -150,14 +150,14 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	// index.htmlがあればそれを返す
 	indexPath := strings.TrimLeft(strings.TrimRight(path, "/")+"/index.html", "/")
-	content, ok = bucket.Contents[indexPath]
+	content, ok = manifest.Contents[indexPath]
 	if ok {
 		renderFile(w, downloader, content)
 		return
 	}
 
 	// ディレクトリであれば、ファイル一覧を返す
-	children := getDirectoryContentList(bucket, path)
+	children := getDirectoryContentList(manifest, path)
 	fmt.Printf("getDirectoryContentList %v", path)
 	if len(children) > 0 {
 		if !strings.HasSuffix(r.URL.Path, "/") {

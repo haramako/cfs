@@ -25,7 +25,7 @@ CFS_TEST_STORAGE=s3  go test ./internal/cfs     # 実 S3 の s3://cfs-autotest �
 CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 ```
 
-- `bucket_test.go` が主要な結合テスト（新規アップロード、上書き、圧縮、無圧縮拡張子、タグ）。`TestMain` で暗号鍵/IV を固定値に設定している
+- `manifest_test.go` が主要な結合テスト（新規アップロード、上書き、圧縮、無圧縮拡張子、タグ）。`TestMain` で暗号鍵/IV を固定値に設定している
 - `s3_storage_test.go` は `httptest` の偽サーバーに対して、送られるリクエスト（パス・ACL・Content-Type・既存確認・0 バイト時の挙動）を確認する。`newS3Storage` の `optFns` でエンドポイントを差し替えている。GCS の偽サーバーテストは GCS と一緒に外した（git 履歴の 20d4f1d に残る）
 - `client_test.go` は `DummyStorage` を使ったアップロードテスト（失敗注入部分はコメントアウトされたまま）
 - `internal/pack/pack_test.go` はパック/パースの往復テスト
@@ -46,7 +46,7 @@ CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 ## 歴史メモ
 
 - 2015-09: 開始
-- 2019-08: サーバー実装（`cfssv`, `cfs://`）を削除し、pack/unpack/pack-bucket を追加
+- 2019-08: サーバー実装（`cfssv`, `cfs://`）を削除し、pack/unpack/pack-manifest を追加
 - 2019-09〜11: `merge --filter-cmd`、mtime 1 秒誤差の許容
 - 2020-08: `http` サーバーのポート指定
 - 2020-12: CircleCI 導入、フェッチのリトライ、`~/.cfs_setting` の `HomeRoot`

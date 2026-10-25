@@ -27,7 +27,7 @@ diff /tmp/old.txt /tmp/new.txt
 
 - `-h` / `help <cmd>` / `config` / `setting`
 - `upload`（初回・変更なし・変更あり・`-f`・引数の後ろのフラグ）、`ls`（タグ・ハッシュ・`--verify`）、`cat`、`merge`、`sync`（`--filter-cmd` 含む）、エラーケース
-- `pack` / `unpack` / `pack-bucket` / `patch` の一覧とファイルの md5
+- `pack` / `unpack` / `pack-manifest` / `patch` の一覧とファイルの md5
 - キャビネット・`~/.cfs`・出力ディレクトリの全ファイルの md5
 - `cfs http` のレスポンス（ファイル・ディレクトリ一覧・リダイレクト）
 

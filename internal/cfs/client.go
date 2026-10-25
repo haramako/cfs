@@ -18,7 +18,7 @@ type uploadRequest struct {
 }
 
 type Client struct {
-	Bucket    *Bucket
+	Manifest    *Manifest
 	Storage   Storage
 	MaxWorker int
 	waitGroup sync.WaitGroup
@@ -58,7 +58,7 @@ func (c *Client) Encode(origHash string, origData []byte, attr ContentAttribute)
 	}
 
 	if hashChanged {
-		hash = c.Bucket.Sum(data)
+		hash = c.Manifest.Sum(data)
 	} else {
 		hash = origHash
 	}
@@ -129,7 +129,7 @@ func (c *Client) AddFiles(root string) error {
 }
 
 func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, error) {
-	b := c.Bucket
+	b := c.Manifest
 
 	fullPath := filepath.Join(root, relative)
 	key := filepath.ToSlash(relative)
@@ -191,7 +191,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 }
 
 func (c *Client) AddContent(relative string, content []byte) (bool, error) {
-	b := c.Bucket
+	b := c.Manifest
 
 	key := filepath.ToSlash(relative)
 	if Option.Flatten {
@@ -229,7 +229,7 @@ func (c *Client) Finish() error {
 	close(c.queue)
 	c.waitGroup.Wait()
 
-	err := c.UploadBucket()
+	err := c.UploadManifest()
 	if err != nil {
 		return err
 	}
@@ -237,8 +237,8 @@ func (c *Client) Finish() error {
 	return nil
 }
 
-func (c *Client) UploadBucket() error {
-	b := c.Bucket
+func (c *Client) UploadManifest() error {
+	b := c.Manifest
 
 	origData := []byte(b.Dump())
 	origHash := b.Sum(origData)
@@ -248,13 +248,13 @@ func (c *Client) UploadBucket() error {
 		return err
 	}
 
-	err = c.Storage.Upload("*bucket*", hash, data, false)
+	err = c.Storage.Upload("*manifest*", hash, data, false)
 	if err != nil {
 		return err
 	}
 	b.Hash = hash
 
-	// バケットの保存先が設定されているなら保存する
+	// マニフェストの保存先が設定されているなら保存する
 	if b.Path != "" {
 		err = os.WriteFile(filepath.FromSlash(b.Path), origData, 0666)
 		if err != nil {
@@ -263,7 +263,7 @@ func (c *Client) UploadBucket() error {
 
 		os.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
 		if Verbose {
-			fmt.Printf("write bucket to '%s' (%s)\n", b.Path, b.Hash)
+			fmt.Printf("write manifest to '%s' (%s)\n", b.Path, b.Hash)
 		}
 	}
 

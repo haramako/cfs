@@ -30,7 +30,7 @@ data          各エントリのデータをパス順に連結（非圧縮・非
 | コマンド | 内容 |
 |---|---|
 | `cfs pack out.tp dir` | `NewPackFileFromDir` でディレクトリを走査（パスは NFC 正規化）してパック。キャビネットの除外ルールは適用されない |
-| `cfs pack-bucket location out.tp` | バケットの全データを `FetchAll`（8 並列・3 回リトライ）でキャッシュに落としてから、デコードしてパック。ハッシュは `OrigHash` |
+| `cfs pack-manifest location out.tp` | マニフェストの全データを `FetchAll`（8 並列・3 回リトライ）でキャッシュに落としてから、デコードしてパック。ハッシュは `OrigHash` |
 | `cfs unpack in.tp` | エントリ一覧（パス, サイズ, ハッシュ）を表示 |
 | `cfs unpack in.tp -o dir` | 展開 |
 | `cfs patch base.tp current.tp out.tp` | `current` のうち、`base` にないパス、またはハッシュが異なるエントリだけを含むパックを作る |

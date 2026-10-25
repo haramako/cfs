@@ -74,7 +74,7 @@ func main() {
 		httpCommand,
 		packCommand,
 		unpackCommand,
-		packBucketCommand,
+		packManifestCommand,
 		patchCommand,
 	}
 
@@ -148,10 +148,10 @@ var uploadCommand = &cli.Command{
 			Usage:   "tag name",
 		},
 		&cli.StringFlag{
-			Name:    "bucket",
-			Aliases: []string{"b"},
+			Name:    "manifest",
+			Aliases: []string{"m"},
 			Value:   "", // 指定されない場合は、自動で設定される
-			Usage:   "bucket file name",
+			Usage:   "local manifest file (cache of the last upload)",
 		},
 		&cli.StringFlag{
 			Name:    "output",
@@ -189,9 +189,9 @@ func doUpload(_ context.Context, c *cli.Command) error {
 	}
 
 	output := c.String("output")
-	bucketPath := c.String("bucket")
-	if bucketPath == "" {
-		// bucketが指定されていない場合は、自動でパスを作成する
+	manifestPath := c.String("manifest")
+	if manifestPath == "" {
+		// manifestが指定されていない場合は、自動でパスを作成する
 		cwd, err := filepath.Abs(".")
 		check(err)
 
@@ -205,26 +205,26 @@ func doUpload(_ context.Context, c *cli.Command) error {
 		filename = escapeFilename(filename)
 		filename = fmt.Sprintf("%x", md5.Sum([]byte(filename)))
 		// println("cachefile = " + filename)
-		bucketPath = filepath.Join(cfs.GlobalCacheDir(), filename)
+		manifestPath = filepath.Join(cfs.GlobalCacheDir(), filename)
 	}
 
 	var err error
-	var bucket *cfs.Bucket
+	var manifest *cfs.Manifest
 	if cfs.Option.NoCache {
-		bucket = cfs.NewBucket()
-		bucket.Path = bucketPath
+		manifest = cfs.NewManifest()
+		manifest.Path = manifestPath
 	} else {
-		bucket, err = cfs.BucketFromFile(bucketPath)
+		manifest, err = cfs.ManifestFromFile(manifestPath)
 		check(err)
 	}
-	bucket.Tag = c.String("tag")
+	manifest.Tag = c.String("tag")
 
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
 	check(err)
 
 	client := &cfs.Client{
 		Storage: storage,
-		Bucket:  bucket,
+		Manifest:  manifest,
 	}
 
 	check(client.Init())
@@ -233,11 +233,11 @@ func doUpload(_ context.Context, c *cli.Command) error {
 		check(client.AddFiles(path))
 	}
 
-	bucket.RemoveUntouched()
+	manifest.RemoveUntouched()
 	check(client.Finish())
 
 	if output != "" {
-		check(os.WriteFile(output, []byte(bucket.Hash), 0777))
+		check(os.WriteFile(output, []byte(manifest.Hash), 0777))
 	}
 	return nil
 }
@@ -264,23 +264,23 @@ func doSync(_ context.Context, c *cli.Command) error {
 	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
-	bucket, err := downloader.LoadBucket(location)
+	manifest, err := downloader.LoadManifest(location)
 	check(err)
 
 	filter := c.String("filter-cmd")
 
 	if filter != "" {
-		bucket, err = filterBucket(filter, bucket)
+		manifest, err = filterManifest(filter, manifest)
 		check(err)
 	}
 
-	check(downloader.Sync(bucket, dir))
+	check(downloader.Sync(manifest, dir))
 	return nil
 }
 
 var mergeCommand = &cli.Command{
 	Name:      "merge",
-	Usage:     "merge buckets",
+	Usage:     "merge manifests",
 	Action:    doMerge,
 	ArgsUsage: "output-tag location [...]",
 	Flags: []cli.Flag{
@@ -310,25 +310,25 @@ func doMerge(_ context.Context, c *cli.Command) error {
 	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
-	merged := &cfs.Bucket{
+	merged := &cfs.Manifest{
 		Tag:      mergeTo,
 		Contents: make(map[string]cfs.Content),
 		HashType: "md5",
 	}
 
 	for _, location := range mergeFrom {
-		bucket, err := downloader.LoadBucket(location)
+		manifest, err := downloader.LoadManifest(location)
 		check(err)
 		if cfs.Verbose {
-			fmt.Printf("%d files merged from %s\n", len(bucket.Contents), location)
+			fmt.Printf("%d files merged from %s\n", len(manifest.Contents), location)
 		}
-		merged.Merge(bucket)
+		merged.Merge(manifest)
 	}
 
 	filter := c.String("filter-cmd")
 
 	if filter != "" {
-		merged, err = filterBucket(filter, merged)
+		merged, err = filterManifest(filter, merged)
 		check(err)
 	}
 
@@ -336,18 +336,18 @@ func doMerge(_ context.Context, c *cli.Command) error {
 		fmt.Printf("total %d files into %s\n", len(merged.Contents), mergeTo)
 	}
 
-	// マージしたバケットを書き込む
+	// マージしたマニフェストを書き込む
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
 	check(err)
 
 	client := &cfs.Client{
 		Storage: storage,
-		Bucket:  merged,
+		Manifest:  merged,
 	}
 
 	check(client.Init())
 
-	check(client.UploadBucket())
+	check(client.UploadManifest())
 
 	if output != "" {
 		check(os.WriteFile(output, []byte(merged.Hash), 0777))
@@ -377,10 +377,10 @@ func doCat(_ context.Context, c *cli.Command) error {
 	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
-	bucket, err := downloader.LoadBucket(location)
+	manifest, err := downloader.LoadManifest(location)
 	check(err)
 
-	content, ok := bucket.Contents[filename]
+	content, ok := manifest.Contents[filename]
 	if !ok {
 		fmt.Println("file " + filename + " not found")
 		os.Exit(1)
@@ -395,7 +395,7 @@ func doCat(_ context.Context, c *cli.Command) error {
 
 var lsCommand = &cli.Command{
 	Name:      "ls",
-	Usage:     "list files in bucket",
+	Usage:     "list files in manifest",
 	Action:    doLs,
 	ArgsUsage: "location",
 	Flags: []cli.Flag{
@@ -422,22 +422,22 @@ func doLs(_ context.Context, c *cli.Command) error {
 	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
-	bucket, err := downloader.LoadBucket(location)
+	manifest, err := downloader.LoadManifest(location)
 	check(err)
 
 	// To store the keys in slice in sorted order
 	var keys []string
-	for k := range bucket.Contents {
+	for k := range manifest.Contents {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	if verify {
-		fileStatusList, err := downloader.ExistsAll(bucket)
+		fileStatusList, err := downloader.ExistsAll(manifest)
 		check(err)
 
 		for _, k := range keys {
-			file := bucket.Contents[k]
+			file := manifest.Contents[k]
 			status := "ng"
 			if fileStatusList[k] {
 				status = "ok"
@@ -446,7 +446,7 @@ func doLs(_ context.Context, c *cli.Command) error {
 		}
 	} else {
 		for _, k := range keys {
-			file := bucket.Contents[k]
+			file := manifest.Contents[k]
 			fmt.Printf("%s\t%s\t%d\t%s\n", file.Path, file.OrigHash, file.OrigSize, file.Time.Format(time.RFC3339))
 		}
 	}

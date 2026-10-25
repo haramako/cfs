@@ -6,7 +6,7 @@ import (
 )
 
 func TestUploadWithFailure(t *testing.T) {
-	bucket := &Bucket{HashType: "md5", Contents: make(map[string]Content)}
+	manifest := &Manifest{HashType: "md5", Contents: make(map[string]Content)}
 
 	storage, err := NewDummyStorage("")
 	if err != nil {
@@ -21,7 +21,7 @@ func TestUploadWithFailure(t *testing.T) {
 	}
 
 	client := &Client{
-		Bucket:  bucket,
+		Manifest:  manifest,
 		Storage: storage,
 	}
 	client.Init()

@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func setupBucket() (*Client, *Bucket, string) {
+func setupManifest() (*Client, *Manifest, string) {
 
 	dir, err := os.MkdirTemp("", "cfs-test")
 	dir = filepath.FromSlash(dir)
@@ -32,26 +32,26 @@ func setupBucket() (*Client, *Bucket, string) {
 		panic(err)
 	}
 
-	bucket, err := BucketFromFile(filepath.FromSlash(dir + "/.bucket"))
+	manifest, err := ManifestFromFile(filepath.FromSlash(dir + "/.manifest"))
 	if err != nil {
 		panic(err)
 	}
 
-	storage := newStorage(bucket)
+	storage := newStorage(manifest)
 
 	client := &Client{
-		Bucket:  bucket,
+		Manifest:  manifest,
 		Storage: storage,
 	}
 	client.Init()
 
-	return client, bucket, dir
+	return client, manifest, dir
 }
 
 // testCabinet は、最後に newStorage で作ったキャビネットの場所
 var testCabinet string
 
-func newStorage(bucket *Bucket) Storage {
+func newStorage(manifest *Manifest) Storage {
 	var uri string
 	switch os.Getenv("CFS_TEST_STORAGE") {
 	case "s3":
@@ -72,8 +72,8 @@ func newStorage(bucket *Bucket) Storage {
 	return storage
 }
 
-func setupBucketWithFiles() (*Client, *Bucket, string) {
-	c, b, dir := setupBucket()
+func setupManifestWithFiles() (*Client, *Manifest, string) {
+	c, b, dir := setupManifest()
 	addFile(dir, "hoge", "hoge")
 	addFile(dir, "fuga", "fuga")
 	addFile(dir, "piyo/piyo", "piyo")
@@ -84,26 +84,26 @@ func setupBucketWithFiles() (*Client, *Bucket, string) {
 	return c, b, dir
 }
 
-func setupBucketFromURL(cabinet string, location string) (*Downloader, *Bucket) {
+func setupManifestFromCabinet(cabinet string, location string) (*Downloader, *Manifest) {
 	downloader, err := NewDownloader(cabinet)
 	if err != nil {
 		panic(err)
 	}
 
-	bucket, err := downloader.LoadBucket(location)
+	manifest, err := downloader.LoadManifest(location)
 	if err != nil {
 		panic(err)
 	}
-	return downloader, bucket
+	return downloader, manifest
 }
 
-func assertContents(t *testing.T, b *Bucket, n int) {
+func assertContents(t *testing.T, b *Manifest, n int) {
 	if len(b.Contents) != n {
 		t.Errorf("b.Contents must be %v but %v", n, len(b.Contents))
 	}
 }
 
-func assertUploadCount(t *testing.T, b *Bucket, n int) {
+func assertUploadCount(t *testing.T, b *Manifest, n int) {
 	if b.UploadCount != n {
 		// t.Errorf("upload count must be %v but %v", n, b.Uploader.UploadCount)
 	}
@@ -128,8 +128,8 @@ func addFile(dir, file, content string) {
 	}
 }
 
-func TestNewBucket(t *testing.T) {
-	c, b, dir := setupBucket()
+func TestNewManifest(t *testing.T) {
+	c, b, dir := setupManifest()
 
 	addFile(dir, "hoge", "fuga")
 	c.AddFiles(dir)
@@ -148,7 +148,7 @@ func TestNewBucket(t *testing.T) {
 }
 
 func TestOverwriteFile(t *testing.T) {
-	c, b, dir := setupBucketWithFiles()
+	c, b, dir := setupManifestWithFiles()
 
 	addFile(dir, "hoge", "piyo")
 	c.AddFiles(dir)
@@ -185,7 +185,7 @@ func TestOverwriteFile(t *testing.T) {
 
 // アップロードしたものを、キャビネットから取得して元に戻せること
 func TestCompress(t *testing.T) {
-	c, b, dir := setupBucket()
+	c, b, dir := setupManifest()
 
 	addFile(dir, "hoge", "piyo")
 	addFile(dir, "fuga.raw", "hage")
@@ -194,12 +194,12 @@ func TestCompress(t *testing.T) {
 
 	err := c.Finish()
 	if err != nil {
-		t.Errorf("cannot finish bucket")
+		t.Errorf("cannot finish manifest")
 		t.Error(err)
 		return
 	}
 
-	d, b2 := setupBucketFromURL(testCabinet, b.Hash)
+	d, b2 := setupManifestFromCabinet(testCabinet, b.Hash)
 	if b2 == nil {
 		return // なにもしない
 	}
@@ -231,7 +231,7 @@ func TestCompress(t *testing.T) {
 }
 
 func TestRawFile(t *testing.T) {
-	c, b, dir := setupBucket()
+	c, b, dir := setupManifest()
 
 	addFile(dir, "hoge.raw", "raw1")
 	c.AddFiles(dir)
@@ -254,7 +254,7 @@ func TestRawFile(t *testing.T) {
 }
 
 func TestTag(t *testing.T) {
-	c, b, dir := setupBucket()
+	c, b, dir := setupManifest()
 	b.Tag = "test"
 
 	addFile(dir, "hoge.txt", "hoge")
@@ -262,7 +262,7 @@ func TestTag(t *testing.T) {
 
 	err := c.Finish()
 	if err != nil {
-		t.Errorf("cannot finish bucket")
+		t.Errorf("cannot finish manifest")
 		t.Error(err)
 		return
 	}

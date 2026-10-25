@@ -10,14 +10,14 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var packBucketCommand = &cli.Command{
-	Name:      "pack-bucket",
-	Usage:     "pack specified bucket",
-	Action:    doPackBucket,
+var packManifestCommand = &cli.Command{
+	Name:      "pack-manifest",
+	Usage:     "pack specified manifest",
+	Action:    doPackManifest,
 	ArgsUsage: "location packfile.cfspack",
 }
 
-func packFromBucket(b *cfs.Bucket, d *cfs.Downloader) (*pack.PackFile, error) {
+func packFromManifest(b *cfs.Manifest, d *cfs.Downloader) (*pack.PackFile, error) {
 
 	err := d.FetchAll(b)
 	check(err)
@@ -38,7 +38,7 @@ func packFromBucket(b *cfs.Bucket, d *cfs.Downloader) (*pack.PackFile, error) {
 	return pack.NewPackFile(entries), nil
 }
 
-func doPackBucket(_ context.Context, c *cli.Command) error {
+func doPackManifest(_ context.Context, c *cli.Command) error {
 	loadConfig(c)
 
 	var args = c.Args().Slice()
@@ -53,17 +53,17 @@ func doPackBucket(_ context.Context, c *cli.Command) error {
 	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	check(err)
 
-	bucket, err := downloader.LoadBucket(location)
+	manifest, err := downloader.LoadManifest(location)
 	check(err)
 
 	filter := c.String("filter-cmd")
 
 	if filter != "" {
-		bucket, err = filterBucket(filter, bucket)
+		manifest, err = filterManifest(filter, manifest)
 		check(err)
 	}
 
-	pak, err := packFromBucket(bucket, downloader)
+	pak, err := packFromManifest(manifest, downloader)
 	check(err)
 
 	w, err := os.OpenFile(packfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
