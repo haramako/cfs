@@ -23,6 +23,7 @@ type Client struct {
 	MaxWorker int
 	waitGroup sync.WaitGroup
 	queue     chan uploadRequest
+	queued    map[string]bool // 今回のアップロードで既に送ったデータ（同じ中身を2回送らない）
 	keys      *KeyRing
 	signer    *SigningKey
 }
@@ -41,6 +42,7 @@ func (c *Client) Init() error {
 	}
 
 	c.queue = make(chan uploadRequest, c.MaxWorker)
+	c.queued = map[string]bool{}
 
 	c.waitGroup.Add(c.MaxWorker)
 	for i := 0; i < c.MaxWorker; i++ {
@@ -79,8 +81,10 @@ func (c *Client) Upload(filename string, origData []byte, attr ContentAttribute)
 	}
 
 	// 0 バイトのデータは置かない（ダウンロード側が空のファイルを作る）
-	if len(data) > 0 {
-		c.queue <- uploadRequest{Filename: filename, Key: dataKey(hash), Data: data}
+	key := dataKey(hash)
+	if len(data) > 0 && !c.queued[key] {
+		c.queued[key] = true
+		c.queue <- uploadRequest{Filename: filename, Key: key, Data: data}
 	}
 
 	return hash, len(data), nil

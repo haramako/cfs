@@ -45,6 +45,12 @@ func (s *FileStorage) Put(key string, body []byte, overwrite bool) error {
 		return err
 	}
 	if err := atomic.WriteFile(file, bytes.NewReader(body)); err != nil {
+		// 同じ中身を同時に書こうとして、相手が先に置いた場合（Windows では置き換えに失敗する）
+		if !overwrite {
+			if existing, rerr := os.ReadFile(file); rerr == nil && bytes.Equal(existing, body) {
+				return nil
+			}
+		}
 		return err
 	}
 

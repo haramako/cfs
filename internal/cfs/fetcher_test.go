@@ -89,6 +89,27 @@ func TestHttpFetcherError(t *testing.T) {
 	}
 }
 
+func TestFileStorageConcurrentPut(t *testing.T) {
+	// 同じ中身を同時に置いても失敗しないこと（Windows では置き換えが競合する）
+	s, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := dataKey(SumHash([]byte("same")))
+	errs := make(chan error, 16)
+	for i := 0; i < 16; i++ {
+		go func() { errs <- s.Put(key, []byte("same"), false) }()
+	}
+	for i := 0; i < 16; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent put failed: %v", err)
+		}
+	}
+	if ok, _ := s.Exists(key); !ok {
+		t.Errorf("data must exist")
+	}
+}
+
 func TestNewFetcherUnsupported(t *testing.T) {
 	if _, err := NewFetcher("ftp://example.com/"); err == nil {
 		t.Error("ftp must be unsupported")
