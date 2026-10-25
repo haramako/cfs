@@ -145,16 +145,21 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func setupFakeS3(t *testing.T, region string) (*fakeS3, *S3Storage) {
-	// 手元の AWS の設定に左右されないようにする
+// isolateAWSEnv は、手元の AWS の設定（AWS_PROFILE や ~/.aws/config）にテストが左右されないようにする
+func isolateAWSEnv(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "dummy")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "dummy")
+	t.Setenv("AWS_SESSION_TOKEN", "")
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("AWS_DEFAULT_REGION", "")
 	t.Setenv("AWS_PROFILE", "")
 	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "none"))
 	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "none"))
+}
+
+func setupFakeS3(t *testing.T, region string) (*fakeS3, *S3Storage) {
+	isolateAWSEnv(t)
 
 	fake := &fakeS3{region: region, objects: map[string][]byte{}, modified: map[string]time.Time{}}
 	server := httptest.NewServer(fake)
@@ -363,7 +368,7 @@ func TestS3RoundTrip(t *testing.T) {
 
 func TestS3FetcherFromURL(t *testing.T) {
 	// s3:// の場所から Fetcher を作れること（実際の通信はしない）
-	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	isolateAWSEnv(t)
 	saved := Option.S3Region
 	defer func() { Option.S3Region = saved }()
 	Option.S3Region = "ap-northeast-1"
