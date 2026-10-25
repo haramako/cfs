@@ -18,18 +18,20 @@ type uploadRequest struct {
 }
 
 type Client struct {
-	Manifest  *Manifest
-	Storage   Storage
-	Config    *Config // nil なら既定の設定
-	MaxWorker int
-	waitGroup sync.WaitGroup
-	queue     chan uploadRequest
-	queued    map[string]bool // 今回のアップロードで既に送ったデータ（同じ中身を2回送らない）
-	cfg       *Config
-	excluder  *Excluder
-	keys      *KeyRing
-	signer    *SigningKey
-	log       Logger
+	Manifest   *Manifest
+	Storage    Storage
+	Config     *Config // nil なら既定の設定
+	MaxWorker  int
+	waitGroup  sync.WaitGroup
+	queue      chan uploadRequest
+	queued     map[string]bool // 今回のアップロードで既に送ったデータ（同じ中身を2回送らない）
+	cfg        *Config
+	excluder   *PathPatterns
+	noEncrypt  *PathPatterns
+	noCompress *PathPatterns
+	keys       *KeyRing
+	signer     *SigningKey
+	log        Logger
 
 	errMutex sync.Mutex
 	err      error // アップロードで最初に起きたエラー
@@ -44,7 +46,13 @@ func (c *Client) Init() error {
 
 	var err error
 	if c.excluder, err = NewExcluder(c.cfg.Exclude); err != nil {
-		return err
+		return fmt.Errorf("Exclude: %w", err)
+	}
+	if c.noEncrypt, err = NewPathPatterns(c.cfg.NoEncrypt); err != nil {
+		return fmt.Errorf("NoEncrypt: %w", err)
+	}
+	if c.noCompress, err = NewPathPatterns(c.cfg.NoCompress); err != nil {
+		return fmt.Errorf("NoCompress: %w", err)
 	}
 	if c.keys, err = c.cfg.KeyRing(); err != nil {
 		return err
@@ -152,7 +160,7 @@ func (c *Client) AddFiles(root string) error {
 		// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
 		rel = norm.NFC.String(filepath.ToSlash(rel))
 
-		if c.excluder.Excluded(rel, d.IsDir()) {
+		if c.excluder.Match(rel, d.IsDir()) {
 			c.log.Printf("excluded %s\n", rel)
 			if d.IsDir() {
 				return filepath.SkipDir
@@ -270,14 +278,18 @@ func (c *Client) contentKey(relative string) string {
 	return key
 }
 
-// attribute は、ファイルの圧縮・暗号化の属性を返す。
-// 大きく、実行時に復号するコストが高いもの（.ab など）は、圧縮も暗号化もしない
+// attribute は、ファイル（アップロードするフォルダからの相対パス）の圧縮・暗号化の属性を返す。
+// 設定の既定に、NoCompress / NoEncrypt のパターンを当てる
 func (c *Client) attribute(path string) ContentAttribute {
-	switch filepath.Ext(path) {
-	case ".ab", ".raw", ".pbx", ".mp4":
-		return NoContentAttribute
+	attr := c.cfg.DefaultAttribute()
+	path = filepath.ToSlash(path)
+	if c.noCompress.MatchFile(path) {
+		attr &^= Compressed
 	}
-	return c.cfg.DefaultAttribute()
+	if c.noEncrypt.MatchFile(path) {
+		attr &^= Crypted
+	}
+	return attr
 }
 
 // Finish は、アップロードが終わるのを待ってから、マニフェストを置く。

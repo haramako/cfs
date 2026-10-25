@@ -153,7 +153,15 @@ func TestManifestSignature(t *testing.T) {
 // uploadTo は、キャビネットに内容をアップロードし、マニフェストを返す
 func uploadTo(t *testing.T, s Storage, tag string, files map[string]string) *Manifest {
 	t.Helper()
-	return uploadWith(t, s, nil, tag, files)
+	return uploadWith(t, s, rawTestConfig(), tag, files)
+}
+
+// rawTestConfig は、既定の設定に、*.raw を圧縮も暗号化もしない設定を足したもの
+func rawTestConfig() *Config {
+	cfg := DefaultConfig()
+	cfg.NoCompress = []string{"*.raw"}
+	cfg.NoEncrypt = []string{"*.raw"}
+	return cfg
 }
 
 // uploadWith は、設定を指定してアップロードする

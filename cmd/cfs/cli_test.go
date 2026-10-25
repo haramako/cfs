@@ -513,7 +513,7 @@ func TestCLIUploadExclude(t *testing.T) {
 
 	// 誤ったパターンはエラー
 	c.write(map[string]string{".cfsenv": `{"Cabinet": "cabinet", "Exclude": ["[bad"]}`})
-	if _, err := c.tryRun("upload", "-t", "v3", "src"); err == nil || !strings.Contains(err.Error(), "invalid exclude pattern") {
+	if _, err := c.tryRun("upload", "-t", "v3", "src"); err == nil || !strings.Contains(err.Error(), "invalid pattern") {
 		t.Errorf("invalid pattern must be an error, but %v", err)
 	}
 }

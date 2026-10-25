@@ -78,3 +78,33 @@ func TestUploadFailureKeepsManifest(t *testing.T) {
 		t.Errorf("tag must not be uploaded")
 	}
 }
+
+func TestClientAttributeFromPatterns(t *testing.T) {
+	storage, _ := NewDummyStorage("")
+	cfg := DefaultConfig()
+	cfg.EncryptKey = "attribute-test-key-1234"
+	cfg.NoEncrypt = []string{"*.ab", "Public/", "!secret.ab"}
+	cfg.NoCompress = []string{"*.ab", "*.mp4"}
+	client := &Client{Manifest: NewManifest(), Storage: storage, Config: cfg}
+	if err := client.Init(); err != nil {
+		t.Fatal(err)
+	}
+	for path, expect := range map[string]ContentAttribute{
+		"a.txt":            Compressed | Crypted,
+		"bundles/x.ab":     NoContentAttribute,
+		"movie.mp4":        Crypted,
+		"Public/a.txt":     Compressed,
+		"Public/sub/b.png": Compressed,
+		"secret.ab":        Crypted, // "!" で暗号化に戻す
+	} {
+		if got := client.attribute(path); got != expect {
+			t.Errorf("attribute(%q) = %v, want %v", path, got, expect)
+		}
+	}
+
+	// 誤ったパターンは、どの設定かが分かるエラーにする
+	bad := &Client{Manifest: NewManifest(), Storage: storage, Config: &Config{NoEncrypt: []string{"[bad"}}}
+	if err := bad.Init(); err == nil || !strings.Contains(err.Error(), "NoEncrypt") {
+		t.Errorf("invalid NoEncrypt must be an error, but %v", err)
+	}
+}

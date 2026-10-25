@@ -24,6 +24,8 @@ func TestMain(m *testing.M) {
 	mainTestConfig = DefaultConfig()
 	mainTestConfig.EncryptKey = "12345678901234567890123456789012"
 	mainTestConfig.CacheDir = cacheDir
+	mainTestConfig.NoCompress = []string{"*.raw"}
+	mainTestConfig.NoEncrypt = []string{"*.raw"}
 	mainTestConfig.Verbose = os.Getenv("CFS_TEST_VERBOSE") != ""
 
 	code := m.Run()

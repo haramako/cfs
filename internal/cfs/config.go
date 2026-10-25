@@ -17,6 +17,10 @@ type Config struct {
 	// アップロードの対象から外すファイルのパターン（.gitignore と似た書き方。exclude.go を参照）。
 	// DefaultExcludes（".*"、"#*"、"*~"）の後に続けて使う
 	Exclude []string
+	// 暗号化しないファイルのパターン（書き方は Exclude と同じ）。EncryptKey があっても暗号化しない
+	NoEncrypt []string
+	// 圧縮しないファイルのパターン（書き方は Exclude と同じ）。Compress が true でも圧縮しない
+	NoCompress []string
 
 	// 暗号化の鍵（任意の長さの文字列。16 文字以上）。環境変数 CFS_ENCRYPT_KEY が優先
 	EncryptKey string

@@ -345,7 +345,7 @@ func TestS3RoundTrip(t *testing.T) {
 
 	manifest := NewManifest()
 	manifest.Tag = "v1"
-	client := &Client{Manifest: manifest, Storage: s}
+	client := &Client{Manifest: manifest, Storage: s, Config: rawTestConfig()}
 	client.Init()
 	if err := client.AddFiles(src); err != nil {
 		t.Fatal(err)

@@ -9,7 +9,7 @@ import (
 
 // gcTest は、時刻を進めながら GC を試すための仕掛け
 // gcTestConfig は、GC のテストでアップロードする設定。暗号化したマニフェストを GC が読めることも確かめる
-var gcTestConfig = &Config{Compress: true, Recursive: true, EncryptKey: "gc-test-key-1234567890"}
+var gcTestConfig = &Config{Compress: true, Recursive: true, EncryptKey: "gc-test-key-1234567890", NoCompress: []string{"*.raw"}, NoEncrypt: []string{"*.raw"}}
 
 func gcTestKeys(t *testing.T) *KeyRing {
 	keys, err := gcTestConfig.KeyRing()
