@@ -10,7 +10,7 @@
 
 ## Items
 
-- [ ] `cfs http` を `cfs serve` に改名し、公開サーバーで動かせるようにする（認証は oauth2-proxy、XSS などの修正、ストリーミング・Range・キャッシュの性能改善）。計画は [discussions/2026-10-25-public-serve-plan.md](discussions/2026-10-25-public-serve-plan.md) (2026-10-25)
+- [ ] `cfs http` を `cfs serve` に改名し、公開サーバーで動かせるようにする（用途は HTML などのアーティファクトの閲覧。認証は oauth2-proxy、XSS などの修正、ファイル一覧のキャッシュと ETag を最優先、ストリーミング・Range は後回し）。計画は [discussions/2026-10-25-public-serve-plan.md](discussions/2026-10-25-public-serve-plan.md) (2026-10-25)
 - [ ] S3 のリージョンを標準的に指定できるようにする（固定の `ap-northeast-1` をやめる）。計画は [discussions/2026-10-25-s3-region-plan.md](discussions/2026-10-25-s3-region-plan.md) (2026-10-25)
 - [ ] GCS（`gs://`）を実装から外す（当面はローカルと S3 だけ、後から足せる設計は保つ）。方針は [discussions/2026-10-25-storage-scope-file-and-s3-only.md](discussions/2026-10-25-storage-scope-file-and-s3-only.md) (2026-10-25)
 - [ ] Windows で `file://` のキャビネットから取得できない不具合を直す（修正方針で決定）。あわせて `Cabinet` に普通のパス（`./cabinet` など、相対は `.cfsenv` 基準）を書けるようにする。計画は [discussions/2026-10-25-fix-windows-file-download-plan.md](discussions/2026-10-25-fix-windows-file-download-plan.md) (2026-10-25)

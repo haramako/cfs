@@ -15,7 +15,7 @@
 
 ## Log
 
-- 2026-10-25 [cfs http を公開サーバーで動かす計画（認証・安全性・性能）](2026-10-25-public-serve-plan.md) — 追記で決定: 認証は oauth2-proxy、メールアドレス一覧は非公開のデプロイ用リポジトリ、`cfs serve` に改名。認証は前段で（案1 Cloud Run + IAP、案2 oauth2-proxy）。取引先は自前 OAuth クライアント（外部）で通す。XSS・待ち受け・panic・タイムアウトの修正と、ストリーミング・Range・一覧キャッシュの性能改善
+- 2026-10-25 [cfs http を公開サーバーで動かす計画（認証・安全性・性能）](2026-10-25-public-serve-plan.md) — 追記で決定: 認証は oauth2-proxy、メールアドレス一覧は非公開のデプロイ用リポジトリ、`cfs serve` に改名。用途は HTML などのアーティファクトの閲覧で、性能改善は一覧キャッシュと ETag を最優先に見直し。認証は前段で（案1 Cloud Run + IAP、案2 oauth2-proxy）。取引先は自前 OAuth クライアント（外部）で通す。XSS・待ち受け・panic・タイムアウトの修正と、ストリーミング・Range・一覧キャッシュの性能改善
 - 2026-10-25 [リリース用ワークフローの動作確認](2026-10-25-release-workflow-check.md) — `v0.0.0-test.1` で成功（プレリリース、Latest は変わらず）。`prerelease: auto` を追加、goreleaser-action を v7 に更新（v7 は未実行）。確認用リリースとタグは削除済み
 - 2026-10-25 [S3 のリージョンを標準的に指定できるようにする（計画）](2026-10-25-s3-region-plan.md) — `.cfsenv` の `S3Region` → バケットから自動判定 → `AWS_REGION` / プロファイル → `ap-northeast-1` の順。静的サイト URL もリージョンから組み立てる
 - 2026-10-25 [対応ストレージをローカルと S3 に絞る](2026-10-25-storage-scope-file-and-s3-only.md) — **決定**: 当面は `file://` と `s3://` だけ。GCS などは実装から外してよいが、後から足せる設計は保つ。機能を作り直してから再対応
