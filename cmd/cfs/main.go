@@ -282,6 +282,12 @@ var syncCommand = &cli.Command{
 	Usage:     "sync from cabinet",
 	Action:    doSync,
 	ArgsUsage: "location output-dir",
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "delete",
+			Usage: "delete files in output-dir that are not in the manifest",
+		},
+	},
 }
 
 func doSync(_ context.Context, c *cli.Command) error {
@@ -302,7 +308,16 @@ func doSync(_ context.Context, c *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	return downloader.Sync(manifest, args[1])
+	if err := downloader.Sync(manifest, args[1]); err != nil {
+		return err
+	}
+	// 書き出しが全部うまくいってから、一覧にないものを消す
+	if c.Bool("delete") {
+		if _, err := downloader.RemoveUnlisted(manifest, args[1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var mergeCommand = &cli.Command{

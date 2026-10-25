@@ -3,6 +3,9 @@ package cfs
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -185,5 +188,57 @@ func TestEmptyDataIsUploaded(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(out, "empty.raw")); err != nil || len(data) != 0 {
 		t.Errorf("empty file must be synced: %q, %v", data, err)
+	}
+}
+
+func TestRemoveUnlisted(t *testing.T) {
+	_, d, m := newTestDownloader(t, map[string]string{"a.txt": "a", "sub/b.txt": "b"})
+	out := t.TempDir()
+	for p, content := range map[string]string{"extra.txt": "x", "sub/extra.txt": "x", "old/deep/x.txt": "x", "sub/b.txt": "old b"} {
+		full := filepath.Join(out, filepath.FromSlash(p))
+		os.MkdirAll(filepath.Dir(full), 0777)
+		os.WriteFile(full, []byte(content), 0666)
+	}
+	os.MkdirAll(filepath.Join(out, "empty"), 0777)
+
+	if err := d.Sync(m, out); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := d.RemoveUnlisted(m, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(removed)
+	if got := strings.Join(removed, ","); got != "empty/,extra.txt,old/,old/deep/,old/deep/x.txt,sub/extra.txt" {
+		t.Errorf("removed = %s", got)
+	}
+
+	var left []string
+	filepath.Walk(out, func(p string, info os.FileInfo, err error) error {
+		if p != out {
+			rel, _ := filepath.Rel(out, p)
+			left = append(left, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	sort.Strings(left)
+	if got := strings.Join(left, ","); got != "a.txt,sub,sub/b.txt" {
+		t.Errorf("only listed files must remain: %s", got)
+	}
+}
+
+func TestRemoveUnlistedIgnoresCaseOnWindowsAndMac(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+		t.Skip("file names are case sensitive")
+	}
+	_, d, m := newTestDownloader(t, map[string]string{"a.txt": "a"})
+	out := t.TempDir()
+	// 大文字の名前で置いてあるファイルに書き出すと、名前は大文字のまま残る。それを一覧にないものとして消さない
+	os.WriteFile(filepath.Join(out, "A.txt"), []byte("old"), 0666)
+	if err := d.Sync(m, out); err != nil {
+		t.Fatal(err)
+	}
+	if removed, err := d.RemoveUnlisted(m, out); err != nil || len(removed) != 0 {
+		t.Errorf("file differing only in case must not be removed: %v, %v", removed, err)
 	}
 }

@@ -543,3 +543,22 @@ func TestCLIUnpackRejectsUnsafePath(t *testing.T) {
 		t.Errorf("file outside the output dir must not be written")
 	}
 }
+
+func TestCLISyncDelete(t *testing.T) {
+	c := newCLITest(t)
+	c.write(map[string]string{"src/a.txt": "a", "src/sub/b.txt": "b"})
+	c.run("-c", c.cabinet, "cabinet", "init")
+	c.run("-c", c.cabinet, "upload", "-t", "v1", "src")
+	c.write(map[string]string{"out/extra.txt": "extra", "out/old/x.txt": "old"})
+
+	// 既定では、一覧にないファイルを消さない
+	c.run("-c", c.cabinet, "sync", "v1", "out")
+	equalTree(t, c.readTree("out"), map[string]string{"a.txt": "a", "sub/b.txt": "b", "extra.txt": "extra", "old/x.txt": "old"})
+
+	// --delete を付けると消す（オプションは引数の後ろにも書ける）
+	c.run("-c", c.cabinet, "sync", "v1", "out", "--delete")
+	equalTree(t, c.readTree("out"), map[string]string{"a.txt": "a", "sub/b.txt": "b"})
+	if _, err := os.Stat(filepath.Join(c.dir, "out", "old")); err == nil {
+		t.Errorf("empty folder must be removed")
+	}
+}
