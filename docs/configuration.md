@@ -46,7 +46,11 @@ CFS の設定は2種類あります。
 
 **ダウンロードする側も、アップロードした側と同じ `Compress`、`EncryptKey`、`EncryptIv` が必要です。** ファイル一覧自体が、これらの設定で圧縮・暗号化されているためです。
 
+### 暗号鍵を `.cfsenv` に書かない
 
+`EncryptKey` と `EncryptIv` は秘密にしたい情報です。`.cfsenv` はリポジトリにコミットされやすいので、**環境変数 `CFS_ENCRYPT_KEY` / `CFS_ENCRYPT_IV` で渡す**のがおすすめです。環境変数は `.cfsenv` より優先され、`.cfsenv` がなくても使われます。CI では GitHub Actions の Secrets などから渡します。
+
+`-V`（詳しいログ）で設定を表示するときも、鍵は `***` と伏せて表示します。
 
 ## `~/.cfs_setting`
 
