@@ -20,7 +20,14 @@ var revision string
 // エントリーポイント
 
 func main() {
+	err := newApp().Run(context.Background(), os.Args)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
 
+// newApp は、cfs のコマンド全体を作る
+func newApp() *cli.Command {
 	app := &cli.Command{}
 	app.Name = "cfs"
 	app.Usage = "cfs client"
@@ -81,11 +88,7 @@ func main() {
 		cabinetCommand,
 		keygenCommand,
 	}
-
-	err := app.Run(context.Background(), os.Args)
-	if err != nil {
-		fmt.Println(err)
-	}
+	return app
 }
 
 func check(err error) {

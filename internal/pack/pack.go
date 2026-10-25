@@ -140,10 +140,17 @@ func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 func NewPackFileFromDir(dir string) (*PackFile, error) {
 	entries := []Entry{}
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
-		path = norm.NFC.String(path)
+		if err != nil {
+			return err
+		}
 		if !info.IsDir() {
-			entryPath := filepath.ToSlash(path[len(dir)+1:])
+			// "." や末尾に区切りのあるパスでも正しくなるように、相対パスで求める
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
+			entryPath := norm.NFC.String(filepath.ToSlash(rel))
 
 			data, err := os.ReadFile(path)
 			if err != nil {

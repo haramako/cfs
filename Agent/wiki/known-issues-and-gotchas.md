@@ -35,3 +35,4 @@
 - `pack.Parse` が `io.ReadFull` を使っていなかった
 - `cmd_patch.go` が `pack.Patch` のエラーを無視していた
 - Windows で `file://` から取得できなかった
+- `pack.NewPackFileFromDir` がパスを文字数で切っていたため、`cfs pack out.tp .` や末尾に区切りのあるフォルダで、パスが壊れていた（`a.txt` → `txt`）。`filepath.Rel` に直した

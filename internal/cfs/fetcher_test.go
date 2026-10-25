@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -107,6 +108,55 @@ func TestFileStorageConcurrentPut(t *testing.T) {
 	}
 	if ok, _ := s.Exists(key); !ok {
 		t.Errorf("data must exist")
+	}
+}
+
+func TestFileStorageListAndDelete(t *testing.T) {
+	s, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"data/ab/c1", "data/ab/c2", "data/ad/c3", "tag/v1", "config.json"} {
+		if err := s.Put(key, []byte(key), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	keys := func(prefix string) []string {
+		t.Helper()
+		list, err := s.List(prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r []string
+		for _, o := range list {
+			r = append(r, o.Key)
+			if o.Size != int64(len(o.Key)) || o.LastModified.IsZero() {
+				t.Errorf("invalid object info %+v", o)
+			}
+		}
+		return r
+	}
+	// prefix はフォルダの途中で切れていてもよい
+	if got := strings.Join(keys("data/a"), ","); got != "data/ab/c1,data/ab/c2,data/ad/c3" {
+		t.Errorf("List(data/a) = %s", got)
+	}
+	if got := strings.Join(keys("data/ab/"), ","); got != "data/ab/c1,data/ab/c2" {
+		t.Errorf("List(data/ab/) = %s", got)
+	}
+	if got := len(keys("")); got != 5 {
+		t.Errorf("List() must return all objects but %d", got)
+	}
+	if got := keys("manifest/"); len(got) != 0 {
+		t.Errorf("missing folder must be empty but %v", got)
+	}
+
+	// 無いものを消しても失敗しない
+	if err := s.Delete([]string{"data/ab/c1", "tag/v1", "data/zz/none"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(keys(""), ","); got != "config.json,data/ab/c2,data/ad/c3" {
+		t.Errorf("after delete = %s", got)
 	}
 }
 

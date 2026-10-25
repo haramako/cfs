@@ -56,6 +56,15 @@ go vet ./...
 
 通常のテストは、一時フォルダを使ったローカルのストレージで動きます。S3 のテストは、偽の HTTP サーバーを相手にするので、認証情報は不要です。
 
+`cmd/cfs/cli_test.go` は、CLI のコマンド（upload / sync / ls / cat / merge / tag / gc / cabinet / keygen / pack / unpack / patch / pack-manifest / `--filter-cmd`）を、一時フォルダのキャビネットに対してプロセスの中で実行して確かめます。
+
+カバレッジは次のように測れます。
+
+```
+go test -coverpkg=./... -coverprofile=cover.out ./...
+go tool cover -func=cover.out
+```
+
 `CFS_TEST_VERBOSE=1` を付けると、詳しいログを表示します。
 
 ### 本物の S3 でのテスト

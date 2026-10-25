@@ -150,8 +150,8 @@ func TestManifestSignature(t *testing.T) {
 	}
 }
 
-// uploadToDummy は、DummyStorage に内容をアップロードし、マニフェストを返す
-func uploadToDummy(t *testing.T, s *DummyStorage, tag string, files map[string]string) *Manifest {
+// uploadTo は、キャビネットに内容をアップロードし、マニフェストを返す
+func uploadTo(t *testing.T, s Storage, tag string, files map[string]string) *Manifest {
 	t.Helper()
 	m := NewManifest()
 	m.Tag = tag
@@ -172,7 +172,7 @@ func uploadToDummy(t *testing.T, s *DummyStorage, tag string, files map[string]s
 
 func TestValidateCache(t *testing.T) {
 	s, _ := NewDummyStorage("")
-	m := uploadToDummy(t, s, "", map[string]string{"a.txt": "a"})
+	m := uploadTo(t, s, "", map[string]string{"a.txt": "a"})
 
 	if ok, err := m.ValidateCache(s); !ok || err != nil {
 		t.Errorf("cache must be valid while the manifest exists (%v, %v)", ok, err)
@@ -198,7 +198,7 @@ func TestDownloaderVerifiesHash(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	s, _ := NewDummyStorage("")
-	m := uploadToDummy(t, s, "v1", map[string]string{"a.txt": "hello"})
+	m := uploadTo(t, s, "v1", map[string]string{"a.txt": "hello"})
 	d := &Downloader{fetcher: s}
 
 	loaded, err := d.LoadManifest("v1")
@@ -228,7 +228,7 @@ func TestSignedManifestRoundTrip(t *testing.T) {
 	Option.VerifyKeys = []string{public}
 
 	s, _ := NewDummyStorage("")
-	uploadToDummy(t, s, "v1", map[string]string{"a.txt": "hello"})
+	uploadTo(t, s, "v1", map[string]string{"a.txt": "hello"})
 	d := &Downloader{fetcher: s}
 	if _, err := d.LoadManifest("v1"); err != nil {
 		t.Errorf("signed manifest must be loaded: %v", err)
@@ -236,7 +236,7 @@ func TestSignedManifestRoundTrip(t *testing.T) {
 
 	// 署名しないでアップロードしたものは、VerifyKeys があると読めない
 	Option.SigningKey = ""
-	uploadToDummy(t, s, "v2", map[string]string{"a.txt": "unsigned"})
+	uploadTo(t, s, "v2", map[string]string{"a.txt": "unsigned"})
 	if _, err := d.LoadManifest("v2"); err == nil {
 		t.Errorf("unsigned manifest must be rejected")
 	}

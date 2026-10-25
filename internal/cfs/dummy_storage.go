@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -93,17 +92,4 @@ func (s *DummyStorage) Open(key string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, key)
 	}
 	return io.NopCloser(bytes.NewReader(o.body)), nil
-}
-
-// setLastModified は、テストで更新日時を古くするために使う
-func (s *DummyStorage) setLastModified(key string, t time.Time) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	o, ok := s.objects[key]
-	if !ok {
-		return errors.New("no object " + key)
-	}
-	o.lastModified = t
-	s.objects[key] = o
-	return nil
 }

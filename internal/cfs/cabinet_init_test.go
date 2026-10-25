@@ -119,7 +119,7 @@ func TestInitFileCabinet(t *testing.T) {
 
 func TestCabinetFormatCheck(t *testing.T) {
 	s, _ := NewDummyStorage("")
-	uploadToDummy(t, s, "v1", map[string]string{"a.txt": "a"})
+	uploadTo(t, s, "v1", map[string]string{"a.txt": "a"})
 	s.Put(cabinetConfigKey, []byte(`{"format": 3}`), true)
 
 	d := &Downloader{fetcher: s}
