@@ -43,7 +43,7 @@ Windows で、`Url` を指定しない `file://` のキャビネット（例: `f
   ```json
   { "Cabinet": "./cabinet" }
   { "Cabinet": "../shared/cabinet" }
-  { "Cabinet": "C:\work\cabinet" }
+  { "Cabinet": "C:\\work\\cabinet" }
   { "Cabinet": "s3://my-bucket" }
   ```
 
@@ -51,7 +51,7 @@ Windows で、`Url` を指定しない `file://` のキャビネット（例: `f
 - **相対パスの基準**
   - `.cfsenv` に書いた相対パスは、**`.cfsenv` があるフォルダ**を基準にする（設定ファイル内の相対パスは設定ファイル基準、という多くのツールの慣習。`cfs -C sub/.cfsenv upload` のように別の場所から実行しても、アップロード先が変わらない）
   - コマンドラインの `--cabinet ./x` は、今いるフォルダを基準にする
-- **Windows のドライブ文字に注意**: Go の `url.Parse("C:\work")` は `C` をスキームと解釈してしまう。URL として解析する前に「英字1文字 + `:` で始まるならパス」と判定する
+- **Windows のドライブ文字に注意**: Go の `url.Parse(`C:\work`)` は `C` をスキームと解釈してしまう。URL として解析する前に「英字1文字 + `:` で始まるならパス」と判定する
 - 内部では、パスを絶対パスにしてから、本文の修正方針で作る「URL ↔ ローカルのパス」の変換と同じ扱いにする
 
 ### テスト
