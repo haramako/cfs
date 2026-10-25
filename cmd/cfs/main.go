@@ -47,7 +47,11 @@ func main() {
 			Name:    "cabinet",
 			Aliases: []string{"c"},
 			Value:   "",
-			Usage:   "cabinet URL",
+			Usage:   "cabinet URL or path",
+		},
+		&cli.StringFlag{
+			Name:  "url",
+			Usage: "download location (URL or path)",
 		},
 		&cli.BoolFlag{
 			Name:    "force",
@@ -92,14 +96,30 @@ func loadConfig(c *cli.Command) {
 	cfs.InitDefaultSetting()
 
 	cfs.Verbose = c.Bool("verbose")
-	cfs.LoadDefaultOptions(c.String("config"))
+	err := cfs.LoadDefaultOptions(c.String("config"))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// コマンドラインで指定された相対パスは、今のフォルダを基準にする
+	cwd, err := os.Getwd()
+	check(err)
 
 	if c.String("cabinet") != "" {
-		cfs.Option.Cabinet = c.String("cabinet")
+		cfs.Option.Cabinet, err = cfs.ResolveLocation(c.String("cabinet"), cwd)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 
 	if c.String("url") != "" {
-		cfs.Option.Url = c.String("url")
+		cfs.Option.Url, err = cfs.ResolveLocation(c.String("url"), cwd)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 
 	if c.Bool("force") {

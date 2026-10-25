@@ -11,11 +11,12 @@ CLI は urfave/cli v3。v1 時代と同じく、コマンドのフラグは引�
 | `--verbose, -V` | false | 詳細ログ（`cfs.Verbose`） |
 | `--config, -C` | `.cfsenv` | プロジェクト設定ファイル |
 | `--setting, -S` | `.cfs_setting` | **定義のみで未使用**（実際は常に `~/.cfs_setting`） |
-| `--cabinet, -c` | — | `Option.Cabinet` を上書き |
+| `--cabinet, -c` | — | `Option.Cabinet` を上書き（URL かパス） |
+| `--url` | — | `Option.Url` を上書き（URL かパス） |
 | `--force, -f` | false | ローカルのバケットキャッシュを使わずに全ファイルを再判定（`Option.NoCache`） |
 | `--filter-cmd` | — | ファイル絞り込み用の外部コマンド（後述） |
 
-`loadConfig` は `c.GlobalString("url")` も読むが、`--url` フラグは定義されていないので常に空。ダウンロード URL を変えたいときは `.cfsenv` の `Url` を使う。
+`--url`（2026-10-25 に定義）でダウンロード元を上書きできる。`--cabinet` / `--url` の相対パスは今いるフォルダ基準、`.cfsenv` の `Cabinet` / `Url` の相対パスは `.cfsenv` のあるフォルダ基準（`ResolveLocation`）。Windows の `C:hoge` 形はエラー。
 
 ## コマンド一覧
 

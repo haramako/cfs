@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
+
 	"path/filepath"
-	"strings"
+
 	"testing"
 	"time"
 )
@@ -180,9 +180,8 @@ func TestOverwriteFile(t *testing.T) {
 	assertUploadCount(t, b, 3)
 }
 
+// アップロードしたものを、キャビネットから取得して元に戻せること
 func TestCompress(t *testing.T) {
-	t.Skip() // "diff"コマンドがないとだめなため
-
 	c, b, dir := setupBucket()
 
 	addFile(dir, "hoge", "piyo")
@@ -213,10 +212,18 @@ func TestCompress(t *testing.T) {
 		return
 	}
 
-	output, _ := exec.Command("diff", "-r", dir, temp).CombinedOutput()
-	if len(strings.Split(string(output), "\n")) != 3 {
-		t.Errorf("invalid diff")
-		t.Error(string(output))
+	for path, expect := range map[string]string{"hoge": "piyo", "fuga.raw": "hage", "piyo/piyo": "piyopiyo"} {
+		data, err := os.ReadFile(filepath.Join(temp, filepath.FromSlash(path)))
+		if err != nil {
+			t.Errorf("cannot read synced %s: %v", path, err)
+			continue
+		}
+		if string(data) != expect {
+			t.Errorf("synced %s must be %q but %q", path, expect, data)
+		}
+	}
+	if b2.Contents["fuga.raw"].Attr != ContentAttribute(0) || b2.Contents["hoge"].Attr == ContentAttribute(0) {
+		t.Errorf("invalid attributes %+v", b2.Contents)
 	}
 }
 

@@ -86,6 +86,10 @@ run cat v1 nothing.txt
 # Url 未指定（cabinet から導出した file:// でダウンロード）
 run -C nourl.cfsenv config
 run -C nourl.cfsenv ls v1
+# ダウンロード元を手元のパスで指定
+run --url cabinet ls v1
+run --url ./cabinet cat v1 a.txt
+run --url C:hoge ls v1
 
 # 変更なしで再アップロード（キャッシュ利用）
 run -V upload -t v1 src

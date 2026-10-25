@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,20 +13,17 @@ import (
 )
 
 type Downloader struct {
-	BaseUrl *url.URL
+	fetcher Fetcher
 }
 
-func NewDownloader(baseRawurl string) (*Downloader, error) {
-	url, err := url.Parse(baseRawurl)
+// NewDownloader は、ダウンロード元（URL か手元のパス）からデータを読む Downloader を作る
+func NewDownloader(location string) (*Downloader, error) {
+	fetcher, err := NewFetcher(location)
 	if err != nil {
 		return nil, err
 	}
 
-	downloader := &Downloader{
-		BaseUrl: url,
-	}
-
-	return downloader, nil
+	return &Downloader{fetcher: fetcher}, nil
 }
 
 func (d *Downloader) LoadBucket(location string) (*Bucket, error) {
@@ -68,7 +62,6 @@ func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
 	result := map[string]bool{}
 	mutex := sync.Mutex{}
 
-	transport := &http.Transport{}
 	wg := sync.WaitGroup{}
 	ch := make(chan Content, 32)
 
@@ -80,19 +73,10 @@ func (d *Downloader) ExistsAll(b *Bucket) (map[string]bool, error) {
 				if Verbose {
 					fmt.Printf("verifying %s (%s)\n", c.Path, c.Hash)
 				}
-				url, err := d.dataUrl(c.Hash)
-				if err != nil {
-					panic(err)
-				}
-				res, err := headRequest(transport, url)
-				if err != nil {
-					mutex.Lock()
-					result[c.Path] = false
-					mutex.Unlock()
-					continue
-				}
+				// 確認できなかった場合も、ないものとして扱う
+				exists, _ := d.fetcher.Exists(dataPath(c.Hash))
 				mutex.Lock()
-				result[c.Path] = (res.StatusCode == 200)
+				result[c.Path] = exists
 				mutex.Unlock()
 			}
 		}()
@@ -210,14 +194,8 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		}
 	} else {
 
-		// ダウンロードURL取得
-		fetchUrl, err := d.dataUrl(hash)
-		if err != nil {
-			return nil, err
-		}
-
 		// ファイルダウンロード
-		data, err = fetch(fetchUrl)
+		data, err = fetchAll(d.fetcher, dataPath(hash))
 		if err != nil {
 			return nil, err
 		}
@@ -233,56 +211,10 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 }
 
 func (d *Downloader) FetchTag(tag string) ([]byte, error) {
-
-	fetchUrl, err := d.BaseUrl.Parse("tag/" + tag)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := fetch(fetchUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
+	return fetchAll(d.fetcher, "tag/"+tag)
 }
 
-func (d *Downloader) dataUrl(hash string) (*url.URL, error) {
-	return d.BaseUrl.Parse(fmt.Sprintf("data/%s/%s", hash[0:2], hash[2:]))
-}
-
-func getRequest(_url *url.URL) (*http.Response, error) {
-	t := &http.Transport{}
-	if isWindows() {
-		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("")))
-	} else {
-		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
-	}
-	c := &http.Client{Transport: t}
-	return c.Get(_url.String())
-}
-
-func headRequest(t *http.Transport, _url *url.URL) (*http.Response, error) {
-	c := &http.Client{Transport: t}
-	return c.Head(_url.String())
-}
-
-func fetch(_url *url.URL) ([]byte, error) {
-	res, err := getRequest(_url)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode >= 400 {
-		return nil, fmt.Errorf("bad response status code %d from %v", res.StatusCode, _url)
-	}
-
-	defer res.Body.Close()
-
-	contents, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return contents, nil
+// dataPath は、中身のハッシュからキャビネット上のパスを返す
+func dataPath(hash string) string {
+	return "data/" + hashPath(hash)
 }

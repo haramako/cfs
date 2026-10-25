@@ -23,14 +23,22 @@ func StorageFromUrl(cabinetUrl *url.URL) (Storage, error) {
 		}
 		return storage, nil
 	case "file":
-		return NewFileStorage(cabinetUrl.Path)
+		path, err := FileURLToPath(cabinetUrl)
+		if err != nil {
+			return nil, err
+		}
+		return NewFileStorage(path)
 	default:
 		return nil, fmt.Errorf("invalid url %v", cabinetUrl)
 	}
 }
 
-func StorageFromString(cabinetUrlStr string) (Storage, error) {
-	cabinetUrl, err := url.Parse(cabinetUrlStr)
+// StorageFromString は、キャビネットの指定（URL か手元のパス）からストレージを作る
+func StorageFromString(cabinet string) (Storage, error) {
+	if !IsURL(cabinet) {
+		return NewFileStorage(cabinet)
+	}
+	cabinetUrl, err := url.Parse(cabinet)
 	if err != nil {
 		return nil, err
 	}

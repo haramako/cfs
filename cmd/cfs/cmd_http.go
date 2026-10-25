@@ -124,11 +124,10 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Loading tag: %v, path: %v\n", tag, path)
 
-	host := cfs.Option.Url
 	location := tag
 	path = path[1:]
 
-	downloader, err := cfs.NewDownloader(host)
+	downloader, err := cfs.NewDownloader(getDownloaderURL())
 	if err != nil {
 		panic(err)
 	}

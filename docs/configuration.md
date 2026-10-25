@@ -25,8 +25,8 @@ CFS の設定は2種類あります。
 
 | キー | 既定値 | 内容 |
 |---|---|---|
-| `Cabinet` | `file:///var/cfs` | アップロード先の URL。`file://` と `s3://` が使えます |
-| `Url` | （空） | ダウンロード元の URL。空なら `Cabinet` から自動で決まります（[ストレージ](storage-backends.md) を参照） |
+| `Cabinet` | `file:///var/cfs` | アップロード先。`s3://` や `file://` の URL か、手元のパス（相対パスは `.cfsenv` のあるフォルダが基準）。[ストレージ](storage-backends.md) を参照 |
+| `Url` | （空） | ダウンロード元。URL か手元のパス。空なら `Cabinet` から自動で決まります（[ストレージ](storage-backends.md) を参照） |
 | `Compress` | `true` | zlib で圧縮するか |
 | `EncryptKey` | （空） | AES の鍵。16、24、32 バイトのどれか。空なら暗号化しません |
 | `EncryptIv` | （空） | AES の IV。16 バイト |
@@ -34,7 +34,7 @@ CFS の設定は2種類あります。
 | `Flatten` | `false` | `true` にすると、フォルダ構成を捨ててファイル名だけで管理します |
 | `NoCache` | `false` | `true` にすると、`--force` と同じく手元のキャッシュを使わずに全ファイルを調べ直します |
 
-コマンドラインの `--cabinet` / `-c` を指定すると、`Cabinet` を上書きできます。
+コマンドラインの `--cabinet` / `-c` で `Cabinet` を、`--url` で `Url` を上書きできます。コマンドラインで書いた相対パスは、今いるフォルダが基準です。
 
 ### 圧縮と暗号化
 

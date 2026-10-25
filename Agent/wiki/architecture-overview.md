@@ -28,10 +28,10 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 
 ## 書き込みと読み込みの非対称性
 
-**書き込み（アップロード）は `Storage` 実装経由、読み込み（ダウンロード）は常に HTTP(S)/`file://` の GET** という設計になっている。
+**書き込み（アップロード）は `Storage` 実装経由、読み込み（ダウンロード）は `Fetcher` 経由**という設計になっている（2026-10-25 に `Fetcher` を切り出した）。
 
 - `Storage` インターフェースは `Upload` / `UploadTag` / `DownloaderUrl` の 3 メソッドだけで、読み込み API を持たない
-- `Downloader` は `BaseUrl` に対して `data/xx/yyyy…` と `tag/<name>` を GET するだけ。`file://` は `http.NewFileTransport` で扱う
+- `Downloader` は `Fetcher`（`internal/cfs/fetcher.go`）で `data/xx/yyyy…` と `tag/<name>` を読む。実装は `httpFetcher`（http/https）と `fileFetcher`（`file://` と手元のパス。直接ファイルを読む）。ないときは `ErrNotFound` を包んだエラー
 - ダウンロード URL は `.cfsenv` の `Url` で明示するか、未指定なら `Storage.DownloaderUrl()`（例: S3 なら静的サイトの URL）を使う（`cmd/cfs/main.go` の `getDownloaderURL`）
 - そのため S3 の場合、**バケットは公開読み取り可能（S3 は静的ウェブサイトホスティング）であることが前提**。CDN やプロキシを前段に置く想定
 
