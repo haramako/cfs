@@ -91,22 +91,22 @@ func TestDownloaderFetchAll(t *testing.T) {
 }
 
 func TestManifestMergeAndRemoveUntouched(t *testing.T) {
-	b := NewManifest()
-	b.Contents["a"] = Content{Path: "a", Hash: "old-a", Touched: true}
-	b.Contents["b"] = Content{Path: "b", Hash: "old-b"}
+	m := NewManifest()
+	m.Contents["a"] = Content{Path: "a", Hash: "old-a", Touched: true}
+	m.Contents["b"] = Content{Path: "b", Hash: "old-b"}
 	from := NewManifest()
 	from.Contents["b"] = Content{Path: "b", Hash: "new-b", Touched: true}
 	from.Contents["c"] = Content{Path: "c", Hash: "new-c"}
 
 	// 両方にあるものは from で上書きする
-	b.Merge(from)
-	if len(b.Contents) != 3 || b.Contents["a"].Hash != "old-a" || b.Contents["b"].Hash != "new-b" || b.Contents["c"].Hash != "new-c" {
-		t.Fatalf("invalid merge result %+v", b.Contents)
+	m.Merge(from)
+	if len(m.Contents) != 3 || m.Contents["a"].Hash != "old-a" || m.Contents["b"].Hash != "new-b" || m.Contents["c"].Hash != "new-c" {
+		t.Fatalf("invalid merge result %+v", m.Contents)
 	}
 
-	b.RemoveUntouched()
-	if len(b.Contents) != 2 || !b.Contents["a"].Touched || !b.Contents["b"].Touched {
-		t.Errorf("only touched contents must remain: %+v", b.Contents)
+	m.RemoveUntouched()
+	if len(m.Contents) != 2 || !m.Contents["a"].Touched || !m.Contents["b"].Touched {
+		t.Errorf("only touched contents must remain: %+v", m.Contents)
 	}
 }
 

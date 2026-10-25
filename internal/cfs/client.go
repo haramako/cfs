@@ -154,16 +154,16 @@ func (c *Client) AddFiles(root string) error {
 }
 
 func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, error) {
-	b := c.Manifest
+	m := c.Manifest
 
 	fullPath := filepath.Join(root, relative)
 	key := filepath.ToSlash(relative)
 	if Option.Flatten {
 		key = filepath.Base(key)
 	}
-	old, found := b.Contents[key]
+	old, found := m.Contents[key]
 	if found {
-		b.Contents[key] = Content{
+		m.Contents[key] = Content{
 			Path:     old.Path,
 			Hash:     old.Hash,
 			Size:     old.Size,
@@ -187,11 +187,11 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 	if found && old.OrigHash == origHash {
 		old.Time = info.ModTime() // 時間だけ更新する
 		old.Touched = true
-		b.Contents[key] = old
+		m.Contents[key] = old
 		return false, nil
 	}
 
-	attr := b.GetAttribute(relative)
+	attr := m.GetAttribute(relative)
 	hash, size, err := c.Upload(relative, origData, attr)
 	if err != nil {
 		return false, err
@@ -201,7 +201,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
 	}
 
-	b.Contents[key] = Content{
+	m.Contents[key] = Content{
 		Path:     key,
 		Hash:     hash,
 		Size:     size,
@@ -216,7 +216,7 @@ func (c *Client) AddFile(root string, relative string, info os.FileInfo) (bool, 
 }
 
 func (c *Client) AddContent(relative string, content []byte) (bool, error) {
-	b := c.Manifest
+	m := c.Manifest
 
 	key := filepath.ToSlash(relative)
 	if Option.Flatten {
@@ -225,7 +225,7 @@ func (c *Client) AddContent(relative string, content []byte) (bool, error) {
 
 	origHash := SumHash(content)
 
-	attr := b.GetAttribute(relative)
+	attr := m.GetAttribute(relative)
 	hash, size, err := c.Upload(relative, content, attr)
 	if err != nil {
 		return false, err
@@ -235,7 +235,7 @@ func (c *Client) AddContent(relative string, content []byte) (bool, error) {
 		fmt.Printf("changed file %-12s (%s)\n", relative, hash)
 	}
 
-	b.Contents[key] = Content{
+	m.Contents[key] = Content{
 		Path:     key,
 		Hash:     hash,
 		Size:     size,
@@ -263,9 +263,9 @@ func (c *Client) Finish() error {
 }
 
 func (c *Client) UploadManifest() error {
-	b := c.Manifest
+	m := c.Manifest
 
-	origData := b.Dump(c.signer)
+	origData := m.Dump(c.signer)
 
 	hash, data, err := c.Encode(origData, DefaultContentAttribute())
 	if err != nil {
@@ -276,24 +276,24 @@ func (c *Client) UploadManifest() error {
 	if err != nil {
 		return err
 	}
-	b.Hash = hash
+	m.Hash = hash
 
 	// マニフェストの保存先が設定されているなら保存する
-	if b.Path != "" {
-		err = os.WriteFile(filepath.FromSlash(b.Path), origData, 0666)
+	if m.Path != "" {
+		err = os.WriteFile(filepath.FromSlash(m.Path), origData, 0666)
 		if err != nil {
 			return err
 		}
 
-		os.WriteFile(filepath.FromSlash(b.Path)+".hash", []byte(b.Hash), 0666)
+		os.WriteFile(filepath.FromSlash(m.Path)+".hash", []byte(m.Hash), 0666)
 		if Verbose {
-			fmt.Printf("write manifest to '%s' (%s)\n", b.Path, b.Hash)
+			fmt.Printf("write manifest to '%s' (%s)\n", m.Path, m.Hash)
 		}
 	}
 
 	// タグが設定されているなら、保存する
-	if b.Tag != "" {
-		err = c.Storage.Put(tagKey(b.Tag), []byte(b.Hash), true)
+	if m.Tag != "" {
+		err = c.Storage.Put(tagKey(m.Tag), []byte(m.Hash), true)
 		if err != nil {
 			return err
 		}

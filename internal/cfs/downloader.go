@@ -76,16 +76,16 @@ func (d *Downloader) LoadManifest(location string) (*Manifest, error) {
 		return nil, err
 	}
 
-	b := NewManifest()
-	b.Hash = hash
-	if err := b.Parse(body, verifier); err != nil {
+	m := NewManifest()
+	m.Hash = hash
+	if err := m.Parse(body, verifier); err != nil {
 		return nil, fmt.Errorf("manifest %s: %w", hash, err)
 	}
 
-	return b, nil
+	return m, nil
 }
 
-func (d *Downloader) ExistsAll(b *Manifest) (map[string]bool, error) {
+func (d *Downloader) ExistsAll(m *Manifest) (map[string]bool, error) {
 	result := map[string]bool{}
 	mutex := sync.Mutex{}
 
@@ -113,7 +113,7 @@ func (d *Downloader) ExistsAll(b *Manifest) (map[string]bool, error) {
 		}()
 	}
 
-	for _, c := range b.Contents {
+	for _, c := range m.Contents {
 		ch <- c
 	}
 
@@ -123,8 +123,8 @@ func (d *Downloader) ExistsAll(b *Manifest) (map[string]bool, error) {
 	return result, nil
 }
 
-func (d *Downloader) Sync(b *Manifest, dir string) error {
-	for _, c := range b.Contents {
+func (d *Downloader) Sync(m *Manifest, dir string) error {
+	for _, c := range m.Contents {
 		if Verbose {
 			fmt.Printf("downloading %s\n", c.Path)
 		}
@@ -152,13 +152,13 @@ func (d *Downloader) Sync(b *Manifest, dir string) error {
 	return nil
 }
 
-func (d *Downloader) FetchAll(b *Manifest) error {
+func (d *Downloader) FetchAll(m *Manifest) error {
 	const RETRY_LIMIT = 3
 	limit := make(chan struct{}, 8)
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 
-	for _, c := range b.Contents {
+	for _, c := range m.Contents {
 		c := c
 		eg.Go(func() error {
 			limit <- struct{}{}

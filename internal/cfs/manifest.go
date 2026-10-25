@@ -90,32 +90,32 @@ func NewManifest() *Manifest {
 // ManifestFromFile は、手元のキャッシュからマニフェストを読む。
 // ファイルがない、または読めない（古い形式など）場合は、空のマニフェストを返す
 func ManifestFromFile(path string) (*Manifest, error) {
-	b := NewManifest()
-	b.Path = path
+	m := NewManifest()
+	m.Path = path
 	data, err := os.ReadFile(filepath.FromSlash(path))
 	if err != nil {
-		return b, nil
+		return m, nil
 	}
 	if Verbose {
-		fmt.Printf("read manifest from '%s'\n", b.Path)
+		fmt.Printf("read manifest from '%s'\n", m.Path)
 	}
-	if err := b.Parse(data, nil); err != nil {
+	if err := m.Parse(data, nil); err != nil {
 		if Verbose {
-			fmt.Printf("ignore local manifest cache '%s': %v\n", b.Path, err)
+			fmt.Printf("ignore local manifest cache '%s': %v\n", m.Path, err)
 		}
-		b = NewManifest()
-		b.Path = path
-		return b, nil
+		m = NewManifest()
+		m.Path = path
+		return m, nil
 	}
 	hash, err := os.ReadFile(filepath.FromSlash(path) + ".hash")
 	if err == nil && isHash(strings.TrimSpace(string(hash))) {
-		b.Hash = strings.TrimSpace(string(hash))
+		m.Hash = strings.TrimSpace(string(hash))
 	}
-	return b, nil
+	return m, nil
 }
 
 // Parse は、形式 v2 のマニフェストを読む。verifier に鍵が設定されていれば、署名を確かめる
-func (b *Manifest) Parse(data []byte, verifier *Verifier) error {
+func (m *Manifest) Parse(data []byte, verifier *Verifier) error {
 	body := data
 	var keyID, signature string
 	if i := bytes.Index(data, []byte("\n"+manifestSignaturePrefix)); i >= 0 {
@@ -168,7 +168,7 @@ func (b *Manifest) Parse(data []byte, verifier *Verifier) error {
 		if !isHash(col[0]) || !isHash(col[4]) {
 			return fmt.Errorf("invalid hash in manifest line %d", n+2)
 		}
-		b.Contents[col[1]] = Content{
+		m.Contents[col[1]] = Content{
 			Hash:     col[0],
 			Path:     col[1],
 			Size:     size,
@@ -183,15 +183,15 @@ func (b *Manifest) Parse(data []byte, verifier *Verifier) error {
 
 // Merge bにfromの内容をマージする
 // 両方に存在する場合は、fromの内容で上書きされる
-func (b *Manifest) Merge(from *Manifest) {
+func (m *Manifest) Merge(from *Manifest) {
 	for _, c := range from.Contents {
-		b.Contents[c.Path] = c
+		m.Contents[c.Path] = c
 	}
 }
 
-func (b *Manifest) RemoveUntouched() {
+func (m *Manifest) RemoveUntouched() {
 	newContents := make(map[string]Content)
-	for _, c := range b.Contents {
+	for _, c := range m.Contents {
 		if c.Touched {
 			newContents[c.Path] = c
 		} else {
@@ -200,13 +200,13 @@ func (b *Manifest) RemoveUntouched() {
 			}
 		}
 	}
-	b.Contents = newContents
+	m.Contents = newContents
 }
 
 // Dump は、Manifestの内容を形式 v2 で書き出す。signer があれば署名を付ける
-func (b *Manifest) Dump(signer *SigningKey) []byte {
+func (m *Manifest) Dump(signer *SigningKey) []byte {
 	keys := []string{}
-	for k := range b.Contents {
+	for k := range m.Contents {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -214,7 +214,7 @@ func (b *Manifest) Dump(signer *SigningKey) []byte {
 	var buf bytes.Buffer
 	buf.WriteString(manifestHeader + "\n")
 	for _, k := range keys {
-		c := b.Contents[k]
+		c := m.Contents[k]
 		buf.WriteString(strings.Join(
 			[]string{
 				c.Hash,
@@ -236,9 +236,9 @@ func (b *Manifest) Dump(signer *SigningKey) []byte {
 }
 
 // DataHashes は、マニフェストが参照するデータのハッシュの一覧を返す（0 バイトのものは置かれないので除く）
-func (b *Manifest) DataHashes() []string {
-	hashes := make([]string, 0, len(b.Contents))
-	for _, c := range b.Contents {
+func (m *Manifest) DataHashes() []string {
+	hashes := make([]string, 0, len(m.Contents))
+	for _, c := range m.Contents {
 		if c.Size > 0 {
 			hashes = append(hashes, c.Hash)
 		}
@@ -246,7 +246,7 @@ func (b *Manifest) DataHashes() []string {
 	return hashes
 }
 
-func (b *Manifest) GetAttribute(path string) ContentAttribute {
+func (m *Manifest) GetAttribute(path string) ContentAttribute {
 	var attr = DefaultContentAttribute()
 	// TODO: とりあえずフィルタを固定している
 	if filepath.Ext(path) == ".ab" || filepath.Ext(path) == ".raw" || filepath.Ext(path) == ".pbx" || filepath.Ext(path) == ".mp4" {
