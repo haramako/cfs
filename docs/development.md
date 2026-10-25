@@ -24,7 +24,7 @@ Agent/            AI エージェント向けの作業メモ（wiki、経緯ロ�
 | `client.go` | アップロード（変更の検出、並列アップロード） |
 | `downloader.go` | ダウンロード（タグの解決、キャッシュ、並列取得） |
 | `storage.go` | ストレージの共通の形と、URL からの選択 |
-| `file_storage.go` / `gcs_storage.go` / `s3_storage.go` | 各ストレージへの書き込み |
+| `file_storage.go` / `s3_storage.go` | 各ストレージへの書き込み |
 | `util.go` | 圧縮と暗号化 |
 | `option.go` / `config.go` | `.cfsenv` と `~/.cfs_setting` の読み込み |
 
@@ -50,12 +50,11 @@ go test ./...
 go vet ./...
 ```
 
-通常のテストは、一時フォルダを使ったローカルのストレージで動きます。S3 と GCS のテストは、偽の HTTP サーバーを相手にするので、認証情報は不要です。
+通常のテストは、一時フォルダを使ったローカルのストレージで動きます。S3 のテストは、偽の HTTP サーバーを相手にするので、認証情報は不要です。
 
-本物の S3 や GCS を相手にテストすることもできます（認証情報が必要です）。
+本物の S3 を相手にテストすることもできます（認証情報が必要です）。
 
 ```
-CFS_TEST_STORAGE=gcs go test ./internal/cfs     # gs://cfs を使います
 CFS_TEST_STORAGE=s3  go test ./internal/cfs     # s3://cfs-autotest を使います
 ```
 

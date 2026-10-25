@@ -15,8 +15,8 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 | `bucket.go` | `Bucket`（ファイル一覧＝マニフェスト）と `Content`（1 ファイル分のメタ）、`ContentAttribute`（圧縮/暗号フラグ）、バケットの TSV シリアライズ |
 | `client.go` | アップロード側。ディレクトリ走査 → 変更検出 → エンコード → ワーカーで並列アップロード → バケット/タグのアップロード |
 | `downloader.go` | ダウンロード側。タグ解決 → バケット取得 → データ取得（ローカルキャッシュ経由）→ デコード |
-| `storage.go` | `Storage` インターフェースと URL スキームからの生成（`file://` / `gs://` / `s3://`） |
-| `file_storage.go` / `gcs_storage.go` / `s3_storage.go` | 各バックエンドの書き込み実装 |
+| `storage.go` | `Storage` インターフェースと URL スキームからの生成（`file://` / `s3://`。`gs://` は 2026-10-25 に外した） |
+| `file_storage.go` / `s3_storage.go` | 各バックエンドの書き込み実装 |
 | `dummy_storage.go` | テスト用のメモリ内ストレージ |
 | `util.go` | ハッシュ判定、`xx/yyyy…` パス変換、zlib 圧縮 + AES-CFB 暗号の `encode`/`decode` |
 | `option.go` | プロジェクト単位の設定 `.cfsenv`（JSON）→ グローバル変数 `Option` |
@@ -24,7 +24,7 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 | `internal/pack/` | 独自バイナリ形式のパックファイル（`TP` 形式）。詳細は [pack-format.md](pack-format.md) |
 | `cmd/cfs/` | CLI（urfave/cli v3）。コマンド一覧は [cli-and-configuration.md](cli-and-configuration.md) |
 
-主な外部依存: S3 は aws-sdk-go-v2、GCS は cloud.google.com/go/storage、YAML は go.yaml.in/yaml/v3、atomic な書き込みに natefinch/atomic。
+主な外部依存: S3 は aws-sdk-go-v2、YAML は go.yaml.in/yaml/v3、atomic な書き込みに natefinch/atomic。
 
 ## 書き込みと読み込みの非対称性
 
@@ -32,8 +32,8 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 
 - `Storage` インターフェースは `Upload` / `UploadTag` / `DownloaderUrl` の 3 メソッドだけで、読み込み API を持たない
 - `Downloader` は `BaseUrl` に対して `data/xx/yyyy…` と `tag/<name>` を GET するだけ。`file://` は `http.NewFileTransport` で扱う
-- ダウンロード URL は `.cfsenv` の `Url` で明示するか、未指定なら `Storage.DownloaderUrl()`（例: GCS なら `http://storage.googleapis.com/<bucket>/`）を使う（`cmd/cfs/main.go` の `getDownloaderURL`）
-- そのため GCS/S3 の場合、**バケットは公開読み取り可能（S3 は静的ウェブサイトホスティング）であることが前提**。CDN やプロキシを前段に置く想定
+- ダウンロード URL は `.cfsenv` の `Url` で明示するか、未指定なら `Storage.DownloaderUrl()`（例: S3 なら静的サイトの URL）を使う（`cmd/cfs/main.go` の `getDownloaderURL`）
+- そのため S3 の場合、**バケットは公開読み取り可能（S3 は静的ウェブサイトホスティング）であることが前提**。CDN やプロキシを前段に置く想定
 
 ## アップロードの流れ（`cfs upload`）
 

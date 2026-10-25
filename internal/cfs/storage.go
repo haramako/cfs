@@ -12,13 +12,10 @@ type Storage interface {
 }
 
 func StorageFromUrl(cabinetUrl *url.URL) (Storage, error) {
+	// ストレージを足すときは、ここに URL スキームを追加する
 	switch cabinetUrl.Scheme {
 	case "gs":
-		storage, err := NewGcsStorage(cabinetUrl.Host)
-		if err != nil {
-			return nil, err
-		}
-		return storage, nil
+		return nil, fmt.Errorf("gs:// (Google Cloud Storage) is not supported yet: %v", cabinetUrl)
 	case "s3":
 		storage, err := NewS3Storage(cabinetUrl.Host)
 		if err != nil {

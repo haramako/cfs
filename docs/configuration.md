@@ -25,7 +25,7 @@ CFS の設定は2種類あります。
 
 | キー | 既定値 | 内容 |
 |---|---|---|
-| `Cabinet` | `file:///var/cfs` | アップロード先の URL。`file://`、`gs://`、`s3://` が使えます |
+| `Cabinet` | `file:///var/cfs` | アップロード先の URL。`file://` と `s3://` が使えます |
 | `Url` | （空） | ダウンロード元の URL。空なら `Cabinet` から自動で決まります（[ストレージ](storage-backends.md) を参照） |
 | `Compress` | `true` | zlib で圧縮するか |
 | `EncryptKey` | （空） | AES の鍵。16、24、32 バイトのどれか。空なら暗号化しません |

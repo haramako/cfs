@@ -5,10 +5,11 @@
 | URL | ストレージ | 認証 |
 |---|---|---|
 | `file:///path/to/dir` | ローカルのフォルダ | 不要 |
-| `gs://<バケット名>` | Google Cloud Storage | Google の標準の認証（後述） |
 | `s3://<バケット名>` | Amazon S3 | AWS の標準の認証（後述） |
 
-`gs://` と `s3://` は、バケット名の後ろのパス（`s3://bucket/some/dir`）を今は無視します。キャビネットはバケットの直下に作られます。
+今のところ、対応しているのはローカルのフォルダと Amazon S3 だけです。Google Cloud Storage（`gs://`）などは、今後対応する予定です。
+
+`s3://` は、バケット名の後ろのパス（`s3://bucket/some/dir`）を今は無視します。キャビネットはバケットの直下に作られます。
 
 ## ダウンロード元
 
@@ -20,26 +21,11 @@
 | `Cabinet` | 自動で決まるダウンロード元 |
 |---|---|
 | `file:///path` | `file:///path/` |
-| `gs://<バケット名>` | `http://storage.googleapis.com/<バケット名>/` |
 | `s3://<バケット名>` | `http://<バケット名>.s3-website-ap-northeast-1.amazonaws.com/` |
 
-そのため、**GCS や S3 を使う場合は、ダウンロードするファイルを HTTP で読めるようにしておく必要があります。**
-
-- GCS: バケットを公開読み取りにするか、前段に CDN を置いて `Url` に指定します
-- S3: 静的ウェブサイトホスティングを有効にして公開読み取りにするか、CloudFront などを前段に置いて `Url` に指定します
+そのため、**S3 を使う場合は、ダウンロードするファイルを HTTP で読めるようにしておく必要があります。** 静的ウェブサイトホスティングを有効にして公開読み取りにするか、CloudFront などを前段に置いて `Url` に指定します。
 
 キャビネットの `data/` の下は中身が変わらないので、CDN で長くキャッシュできます。`tag/` の下は上書きされるので、キャッシュしないか、短くしてください。
-
-## Google Cloud Storage
-
-認証には、Google の標準の仕組み（Application Default Credentials）を使います。gcloud や他の Google のツールと同じ方法で設定できます。
-
-- 手元の PC: `gcloud auth application-default login`
-- サービスアカウントのキー: 環境変数 `GOOGLE_APPLICATION_CREDENTIALS` にキーファイルのパスを指定
-- GCE や GKE の上: そのマシンのサービスアカウントが自動で使われます
-- GitHub Actions: `google-github-actions/auth` の Workload Identity Federation を使うと、長く使うキーを保存せずに済みます
-
-アップロードには、バケットへのオブジェクトの作成と読み取りの権限が必要です（例: `roles/storage.objectCreator` と `roles/storage.objectViewer`）。
 
 ## Amazon S3
 

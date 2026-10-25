@@ -35,5 +35,5 @@ diff /tmp/old.txt /tmp/new.txt
 
 - ダウンロードは `static-server/` 経由の HTTP。Windows では `file://` のダウンロードが元から動かないため（`Url` なしの `file://` ケースは 1 つだけ記録している）
 - panic はスタックトレースのパスが変わるので、標準エラーの先頭 1 行だけを比較する
-- S3 / GCS は対象外（`internal/cfs/*_storage_test.go` の偽サーバーテストで確認する）
+- S3 は対象外（`internal/cfs/*_storage_test.go` の偽サーバーテストで確認する）
 - 時刻はローカルタイムゾーンで出力されるので、比較は同じマシンで行う

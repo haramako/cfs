@@ -19,9 +19,6 @@ type OptionInfo struct {
 	// common setting
 	Cabinet string // アップロード先のURL
 	Url     string // ダウンロード先のURL
-
-	// Google Cloud Storage setting
-
 }
 
 var Option = &OptionInfo{

@@ -52,12 +52,8 @@ func setupBucket() (*Client, *Bucket, string) {
 func newStorage(bucket *Bucket) Storage {
 	var uri string
 	switch os.Getenv("CFS_TEST_STORAGE") {
-	case "gcs":
-		uri = "gs://cfs"
 	case "s3":
 		uri = "s3://cfs-autotest"
-	case "cfs":
-		uri = "cfs://localhost:9999/"
 	default:
 		tempDir, err := os.MkdirTemp("", "cfs-file")
 		if err != nil {

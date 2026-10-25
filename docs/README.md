@@ -11,7 +11,7 @@ CFS (Content base File System) は、ゲームのアセットのような大量�
 | [仕組み](overview.md) | キャビネット・バケット・タグの考え方、差分転送の仕組み、キャッシュ |
 | [設定](configuration.md) | `.cfsenv` と `~/.cfs_setting`、圧縮と暗号化、ローカルのキャッシュ |
 | [コマンド](commands.md) | 全コマンドとオプションの説明 |
-| [ストレージ](storage-backends.md) | ローカル・Google Cloud Storage・Amazon S3 の使い方、認証、必要な権限 |
+| [ストレージ](storage-backends.md) | ローカルと Amazon S3 の使い方、認証、必要な権限 |
 | [パックファイル](pack-format.md) | 複数ファイルを1つにまとめる形式と、差分パッチの作り方 |
 | [制限と注意点](limitations.md) | 知っておくべき挙動や、現在の制限 |
 

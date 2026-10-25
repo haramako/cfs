@@ -21,13 +21,12 @@ go build ./cmd/cfs
 
 ```
 go test ./...                                   # file:// ストレージ（一時ディレクトリ）でテスト
-CFS_TEST_STORAGE=gcs go test ./internal/cfs     # 実 GCS の gs://cfs を使う（要認証）
 CFS_TEST_STORAGE=s3  go test ./internal/cfs     # 実 S3 の s3://cfs-autotest を使う（要 AWS 認証）
 CFS_TEST_VERBOSE=1   go test ./internal/cfs     # 詳細ログ
 ```
 
 - `bucket_test.go` が主要な結合テスト（新規アップロード、上書き、圧縮、無圧縮拡張子、タグ）。`TestMain` で暗号鍵/IV を固定値に設定している
-- `s3_storage_test.go` / `gcs_storage_test.go` は `httptest` の偽サーバーに対して、送られるリクエスト（パス・ACL・Content-Type・既存確認・`ifGenerationMatch=0`・0 バイト時の挙動）を確認する。GCS は `STORAGE_EMULATOR_HOST`、S3 は `newS3Storage` の `optFns` でエンドポイントを差し替えている
+- `s3_storage_test.go` は `httptest` の偽サーバーに対して、送られるリクエスト（パス・ACL・Content-Type・既存確認・0 バイト時の挙動）を確認する。`newS3Storage` の `optFns` でエンドポイントを差し替えている。GCS の偽サーバーテストは GCS と一緒に外した（git 履歴の 20d4f1d に残る）
 - `client_test.go` は `DummyStorage` を使ったアップロードテスト（失敗注入部分はコメントアウトされたまま）
 - `internal/pack/pack_test.go` はパック/パースの往復テスト
 - `config_test.go` は実際のホームディレクトリに `~/.cfs/` を作る

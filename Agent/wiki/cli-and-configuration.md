@@ -56,7 +56,7 @@ pack 系の詳細は [pack-format.md](pack-format.md)。
 
 ```json
 {
-  "Cabinet": "gs://my-bucket",
+  "Cabinet": "s3://my-bucket",
   "Url": "https://cdn.example.com/",
   "Compress": true,
   "EncryptKey": "12345678901234567890123456789012",

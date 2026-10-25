@@ -21,7 +21,6 @@
 |---|---|
 | `config.go` `GlobalCacheDir` / `GlobalDataCacheDir` / `GlobalSettingPath` | 関数内で `globalCacheDir := ...` と書いておりパッケージ変数をシャドーしているため、結果がキャッシュされない。呼ぶたびに `InitDefaultSetting` が `~/.cfs_setting` を読み直す（`Fetch` はファイルごとに呼ぶので無駄が大きい） |
 | `file_storage.go` `Upload` | `os.Stat` 後に `os.IsExist(err)` を見ているが、存在時は `err == nil` なので常に上書きしている（内容は同じなので実害は小さい） |
-| `gcs_storage.go` `Upload` | `if err != nil && googleapi.IsNotModified(err)` のため、304 以外のエラー（認証失敗など）が握りつぶされる。2026-10 のライブラリ移行でも挙動維持のため意図的にそのまま残している |
 | `util.go` `encode` | 引数 `encrypt_key` / `encrypt_iv` を無視して `Option` を直接使っている（`decode` は引数を使う） |
 | `bucket.go` `Parse` | 空行判定が `len(s)`（全体）になっている。列数チェックが `>= 3` なのに `col[6]` まで参照するので、3〜6 列の壊れた行で panic する |
 | `cmd/cfs/main.go` | `--setting` は未使用、`--url` は未定義なのに `GlobalString("url")` を読んでいる |
