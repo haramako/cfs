@@ -42,22 +42,28 @@ func filterPackFile(cmd string, pak *pack.PackFile) (*pack.PackFile, error) {
 	if cmd == "" {
 		return pak, nil
 	}
-	paths := make([]string, 0, len(pak.Entries))
+	paths := make([]string, 0, len(pak.Entries)+len(pak.Deleted))
 	for _, e := range pak.Entries {
 		paths = append(paths, e.Path)
 	}
+	paths = append(paths, pak.Deleted...)
 	keep, err := filterPaths(cmd, paths)
 	if err != nil {
 		return nil, err
 	}
 
-	entries := make([]pack.Entry, 0, len(pak.Entries))
+	filtered := pack.NewPackFile(make([]pack.Entry, 0, len(pak.Entries)))
 	for _, e := range pak.Entries {
 		if keep[e.Path] {
-			entries = append(entries, e)
+			filtered.Entries = append(filtered.Entries, e)
 		}
 	}
-	return pack.NewPackFile(entries), nil
+	for _, p := range pak.Deleted {
+		if keep[p] {
+			filtered.Deleted = append(filtered.Deleted, p)
+		}
+	}
+	return filtered, nil
 }
 
 // filterPaths は、フィルターのコマンドにパスの一覧を渡し、残すパスの集合を返す

@@ -11,7 +11,7 @@ import (
 
 var patchCommand = &cli.Command{
 	Name:      "patch",
-	Usage:     "make patch package",
+	Usage:     "make patch package (changed and added files, and the list of deleted files)",
 	Action:    doPatch,
 	ArgsUsage: "base.tp current.tp output.tp",
 }
@@ -48,6 +48,9 @@ func doPatch(_ context.Context, c *cli.Command) error {
 	if c.Bool("verbose") {
 		for _, e := range patch.Entries {
 			fmt.Printf("changed %s\n", e.Path)
+		}
+		for _, p := range patch.Deleted {
+			fmt.Printf("deleted %s\n", p)
 		}
 	}
 	return writePackFile(args[2], patch)

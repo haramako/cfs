@@ -18,6 +18,7 @@ import (
 type PackFile struct {
 	Version int
 	Entries []Entry
+	Deleted []string // パッチで消すファイルのパス（Patch が作る。ふつうのパックでは空）
 }
 
 // Entry パックファイルの中の一つのファイルを表す
@@ -29,8 +30,11 @@ type Entry struct {
 	Data []byte
 }
 
-// PackFileVersion は現在のPackファイルのバージョン
-const PackFileVersion = 2
+// PackFileVersion は現在のPackファイルのバージョン（3 で、消すファイルの一覧を加えた）
+const PackFileVersion = 3
+
+// maxPathLen は、パスの最大のバイト数（長さを 1 バイトで書くため）
+const maxPathLen = 255
 
 // 標準的に使用するエンディアン
 var endian = binary.LittleEndian
@@ -59,7 +63,7 @@ func Parse(r io.Reader) (*PackFile, error) {
 		return nil, err
 	}
 
-	entries, err := decodeEntryList(entryList, int(entrySize))
+	entries, deleted, err := decodeEntryList(entryList)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +76,7 @@ func Parse(r io.Reader) (*PackFile, error) {
 		}
 	}
 
-	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
-
+	return &PackFile{Version: PackFileVersion, Entries: entries, Deleted: deleted}, nil
 }
 
 // Pack PackFileをファイルに書き込む
@@ -85,9 +88,10 @@ func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 
 	// Entryをソートする
 	sort.Slice(pack.Entries, func(i, j int) bool { return pack.Entries[i].Path < pack.Entries[j].Path })
+	sort.Strings(pack.Deleted)
 
 	// EntryListのサイズを取得する
-	dummyEntry, err := encodeEntryList(pack.Entries, 0)
+	dummyEntry, err := encodeEntryList(pack.Entries, pack.Deleted, 0)
 	if err != nil {
 		return err
 	}
@@ -97,7 +101,7 @@ func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 		return err
 	}
 
-	entry, err := encodeEntryList(pack.Entries, 3+4+len(dummyEntry))
+	entry, err := encodeEntryList(pack.Entries, pack.Deleted, 3+4+len(dummyEntry))
 	if err != nil {
 		return err
 	}
@@ -126,8 +130,11 @@ func Pack(w io.Writer, pack *PackFile, fn func(string) io.Reader) error {
 		for _, e := range pack.Entries {
 			fr := fn(e.Path)
 			size, err := io.Copy(w, fr)
-			if err != nil || int(size) != e.Size {
+			if err != nil {
 				return err
+			}
+			if int(size) != e.Size {
+				return fmt.Errorf("invalid written size %s, expect %d but %d", e.Path, e.Size, size)
 			}
 		}
 	}
@@ -173,11 +180,16 @@ func NewPackFileFromDir(dir string) (*PackFile, error) {
 	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
 }
 
-// Patch は、base から current への差分（増えたものと変わったもの）のパックを作る。消えたものは表現しない
+// Patch は、base から current への差分のパックを作る。
+// 増えたものと変わったものを中身に、base にあって current にないものを Deleted に入れる
 func Patch(base, current *PackFile) (*PackFile, error) {
 	baseHashes := map[string]string{}
 	for _, e := range base.Entries {
 		baseHashes[e.Path] = e.Hash
+	}
+	currentPaths := map[string]bool{}
+	for _, e := range current.Entries {
+		currentPaths[e.Path] = true
 	}
 
 	entries := []Entry{}
@@ -186,15 +198,45 @@ func Patch(base, current *PackFile) (*PackFile, error) {
 			entries = append(entries, e)
 		}
 	}
+	deleted := []string{}
+	for _, e := range base.Entries {
+		if !currentPaths[e.Path] {
+			deleted = append(deleted, e.Path)
+		}
+	}
+	sort.Strings(deleted)
 
-	return &PackFile{Version: PackFileVersion, Entries: entries}, nil
+	return &PackFile{Version: PackFileVersion, Entries: entries, Deleted: deleted}, nil
 }
 
 func encodeHeader() []byte {
 	return []byte{byte('T'), byte('P'), PackFileVersion}
 }
 
-func encodeEntryList(entries []Entry, bodyPos int) ([]byte, error) {
+// writePath は、パスを長さ（1 バイト）と UTF-8 のバイト列で書く
+func writePath(w *bytes.Buffer, p string) error {
+	if len(p) > maxPathLen {
+		return fmt.Errorf("path is too long (max %d bytes): %s", maxPathLen, p)
+	}
+	w.WriteByte(byte(len(p)))
+	w.WriteString(p)
+	return nil
+}
+
+// readPath は、writePath で書いたパスを読む
+func readPath(r *bytes.Buffer) (string, error) {
+	pathLen, err := r.ReadByte()
+	if err != nil {
+		return "", err
+	}
+	pathBytes := make([]byte, pathLen)
+	if _, err := io.ReadFull(r, pathBytes); err != nil {
+		return "", err
+	}
+	return string(pathBytes), nil
+}
+
+func encodeEntryList(entries []Entry, deleted []string, bodyPos int) ([]byte, error) {
 	w := bytes.NewBuffer(nil)
 	pos := bodyPos
 
@@ -206,8 +248,9 @@ func encodeEntryList(entries []Entry, bodyPos int) ([]byte, error) {
 	for i, e := range entries {
 		e.Pos = int(pos)
 		entries[i].Pos = int(pos)
-		binary.Write(w, endian, byte(len(e.Path)))
-		w.Write([]byte(e.Path))
+		if err := writePath(w, e.Path); err != nil {
+			return nil, err
+		}
 		binary.Write(w, endian, uint32(e.Pos))
 		binary.Write(w, endian, uint32(e.Size))
 		hashBytes, err := hex.DecodeString(e.Hash)
@@ -216,6 +259,16 @@ func encodeEntryList(entries []Entry, bodyPos int) ([]byte, error) {
 		}
 		w.Write(hashBytes)
 		pos += e.Size
+	}
+
+	// 消すファイルの一覧
+	if err := binary.Write(w, endian, uint32(len(deleted))); err != nil {
+		return nil, err
+	}
+	for _, p := range deleted {
+		if err := writePath(w, p); err != nil {
+			return nil, err
+		}
 	}
 
 	return w.Bytes(), nil
@@ -232,61 +285,67 @@ func decodeHeader(r io.Reader) error {
 		return fmt.Errorf("Invalid file header, magic")
 	}
 	if header[2] != PackFileVersion {
-		return fmt.Errorf("Invalid file header, version")
+		return fmt.Errorf("unsupported pack file version %d (supported: %d)", header[2], PackFileVersion)
 	}
 	return nil
 }
 
-func decodeEntryList(bin []byte, entrySize int) ([]Entry, error) {
+func decodeEntryList(bin []byte) ([]Entry, []string, error) {
 	r := bytes.NewBuffer(bin)
 
 	var entryCount uint32
 	err := binary.Read(r, endian, &entryCount)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	entries := make([]Entry, entryCount)
 
 	for i := 0; i < int(entryCount); i++ {
-		var pathLen byte
-		var pathBytes [256]byte
 		var pos uint32
 		var size uint32
 		var hash [sha256.Size]byte
 
-		err := binary.Read(r, endian, &pathLen)
+		path, err := readPath(r)
 		if err != nil {
-			return nil, err
-		}
-
-		_, err = io.ReadFull(r, pathBytes[:pathLen])
-		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		err = binary.Read(r, endian, &pos)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		err = binary.Read(r, endian, &size)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		_, err = io.ReadFull(r, hash[:])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		entries[i] = Entry{
-			Path: string(pathBytes[:pathLen]),
+			Path: path,
 			Hash: hex.EncodeToString(hash[:]),
 			Pos:  int(pos),
 			Size: int(size),
 		}
 	}
 
-	return entries, nil
+	var deletedCount uint32
+	if err := binary.Read(r, endian, &deletedCount); err != nil {
+		return nil, nil, err
+	}
+	deleted := make([]string, 0, deletedCount)
+	for i := 0; i < int(deletedCount); i++ {
+		p, err := readPath(r)
+		if err != nil {
+			return nil, nil, err
+		}
+		deleted = append(deleted, p)
+	}
+
+	return entries, deleted, nil
 }

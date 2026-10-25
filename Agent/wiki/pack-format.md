@@ -7,8 +7,8 @@
 すべてリトルエンディアン。
 
 ```
-header        3 bytes   'T' 'P' version(=2。2026-10-25 に SHA-256 化で 1 から上げた)
-listSize      uint32    エントリリスト部のバイト数
+header        3 bytes   'T' 'P' version(=3。2026-10-25 に SHA-256 化で 1→2、同日に削除の一覧を足して 2→3)
+listSize      uint32    エントリリスト部 + 削除リスト部のバイト数
 entryList:
   count       uint32
   entry × count:
@@ -17,6 +17,9 @@ entryList:
     pos       uint32    ファイル先頭からのデータ位置（絶対オフセット）
     size      uint32
     hash      32 bytes  元データの SHA-256
+deletedList:            パッチで消すパス（PackFile.Deleted）。ふつうのパックでは count=0
+  count       uint32
+  path × count: pathLen uint8 + path
 data          各エントリのデータをパス順に連結（非圧縮・非暗号）
 ```
 
@@ -31,10 +34,10 @@ data          各エントリのデータをパス順に連結（非圧縮・非
 |---|---|
 | `cfs pack out.tp dir` | `NewPackFileFromDir` でディレクトリを走査（パスは NFC 正規化）してパック。キャビネットの除外ルールは適用されない |
 | `cfs pack-manifest location out.tp` | マニフェストの全データを `FetchAll`（8 並列・3 回リトライ）でキャッシュに落としてから、デコードしてパック。ハッシュは `OrigHash` |
-| `cfs unpack in.tp` | エントリ一覧（パス, サイズ, ハッシュ）を表示 |
-| `cfs unpack in.tp -o dir` | 展開 |
-| `cfs patch base.tp current.tp out.tp` | `current` のうち、`base` にないパス、またはハッシュが異なるエントリだけを含むパックを作る |
+| `cfs unpack in.tp` | エントリ一覧（パス, サイズ, ハッシュ）と、消すパス（`パス\tdeleted`）を表示 |
+| `cfs unpack in.tp -o dir` | 展開し、`Deleted` のパスを `dir` から消す（ないものは無視）。`..` や絶対パスは `outputPath`（`filepath.IsLocal`）でエラー |
+| `cfs patch base.tp current.tp out.tp` | `current` のうち、`base` にないパス、またはハッシュが異なるエントリと、`base` にあって `current` にないパス（`Deleted`）を含むパックを作る |
 
-## パッチの制限
+## パッチ
 
-`pack.Patch` は追加・変更のみを表現する。**`base` にあって `current` にないファイル（削除）は表現されない**ので、適用側で削除を扱いたい場合は別の手段が必要。
+`pack.Patch` は追加・変更をエントリに、削除を `Deleted` に入れる（2026-10-25 に削除を足して形式を 3 にした。経緯は `../discussions/2026-10-25-pack-patch-deletions.md`）。パッチを当てるのは、`base` を展開したフォルダへの `unpack -o`。`--filter-cmd` はエントリと `Deleted` の両方を絞る。パッチを当てたパック同士の `patch`（パッチのパッチ）は考えていない（`base.Deleted` は見ない）。

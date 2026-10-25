@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/haramako/cfs/internal/pack"
 )
 
 // TestMain は、CFS_TEST_FILTER が設定されていれば、--filter-cmd に渡すフィルターとして動く
@@ -314,6 +316,17 @@ func TestCLIPackUnpackAndPatch(t *testing.T) {
 		t.Errorf("patch must contain changed and new files: %s", got)
 	}
 
+	// 消えたファイルもパッチに入り、展開すると消える
+	c.write(map[string]string{"next/a.txt": "pack a v2", "next/same.txt": "same", "next/new.txt": "new"})
+	c.run("pack", "next.tp", "next")
+	c.run("patch", "current.tp", "next.tp", "patch2.tp")
+	if out := c.run("unpack", "patch2.tp"); strings.TrimSpace(out) != "sub/b.txt\tdeleted" {
+		t.Errorf("patch must list deleted files: %q", out)
+	}
+	c.run("unpack", "-o", "applied", "current.tp")
+	c.run("unpack", "-o", "applied", "patch2.tp")
+	equalTree(t, c.readTree("applied"), map[string]string{"a.txt": "pack a v2", "same.txt": "same", "new.txt": "new"})
+
 	// キャビネットのマニフェストからパックを作る
 	c.run("-c", c.cabinet, "cabinet", "init")
 	c.run("-c", c.cabinet, "upload", "-t", "v1", "base")
@@ -502,5 +515,31 @@ func TestCLIUploadExclude(t *testing.T) {
 	c.write(map[string]string{".cfsenv": `{"Cabinet": "cabinet", "Exclude": ["[bad"]}`})
 	if _, err := c.tryRun("upload", "-t", "v3", "src"); err == nil || !strings.Contains(err.Error(), "invalid exclude pattern") {
 		t.Errorf("invalid pattern must be an error, but %v", err)
+	}
+}
+
+func TestCLIUnpackRejectsUnsafePath(t *testing.T) {
+	c := newCLITest(t)
+	for _, p := range []string{"../evil.txt", "/abs.txt"} {
+		pak := pack.NewPackFile([]pack.Entry{{Path: p, Hash: strings.Repeat("0", 64), Size: 1, Data: []byte("x")}})
+		if err := writePackFile("evil.tp", pak); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.tryRun("unpack", "-o", "out", "evil.tp"); err == nil || !strings.Contains(err.Error(), "invalid path") {
+			t.Errorf("%s must be rejected, but %v", p, err)
+		}
+
+		// 消すファイルの一覧でも同じ
+		del := pack.NewPackFile(nil)
+		del.Deleted = []string{p}
+		if err := writePackFile("evil-del.tp", del); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.tryRun("unpack", "-o", "out", "evil-del.tp"); err == nil || !strings.Contains(err.Error(), "invalid path") {
+			t.Errorf("deleting %s must be rejected, but %v", p, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(c.dir, "evil.txt")); err == nil {
+		t.Errorf("file outside the output dir must not be written")
 	}
 }
