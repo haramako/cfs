@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-25 [S3 から HTTP 公開なしで sync する計画（検討中）](2026-10-25-s3-direct-sync-plan.md) — `Downloader` の取得部分を `Fetcher` に切り出し、`Url` が `s3://` のときだけ GetObject / HeadObject で取得する案。`Url` 未指定時の挙動は据え置き。実装は追加相談の後
 - 2026-10-24 [Go モジュール構成と依存の現代化](2026-10-24-modernize-go-layout.md) — `internal/` へ移動（CLI 専用）、go 1.26、GitHub Actions + goreleaser v2、aws-sdk-go-v2 / cloud.google.com/go/storage / urfave/cli v3 / yaml v3。既知の不具合は挙動維持のため据え置き
 - 2026-09-05 [castle で育った Agent/ 規約を雛形へ逆移植](2026-09-05-port-castle-agent-rules.md) — `@Agent/AGENTS.md` 強制ロード・discussions 自動記録・`scripts/` 領域（記事はコードが正・TODO 昇格先 wiki はオーナーが fa21532 で先に反映）。`[AI]` 規約は据え置き
 

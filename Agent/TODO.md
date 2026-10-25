@@ -10,4 +10,4 @@
 
 ## Items
 
-（なし）
+- [ ] S3 から HTTP 公開なしで sync できるようにする。計画は [discussions/2026-10-25-s3-direct-sync-plan.md](discussions/2026-10-25-s3-direct-sync-plan.md)。オーナーの追加相談を受けてから実装する (2026-10-25)
