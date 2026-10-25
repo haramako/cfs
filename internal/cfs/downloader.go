@@ -132,12 +132,8 @@ func (d *Downloader) ExistsAll(m *Manifest) (map[string]bool, error) {
 	result := map[string]bool{}
 	err := forEachContent(m, existsWorkers, func(c Content) error {
 		d.log.Printf("verifying %s (%s)\n", c.Path, c.Hash)
-		// 0 バイトのデータは置かれない
-		exists := c.Size == 0
-		if !exists {
-			// 確認できなかった場合も、ないものとして扱う
-			exists, _ = d.fetcher.Exists(dataKey(c.Hash))
-		}
+		// 確認できなかった場合も、ないものとして扱う
+		exists, _ := d.fetcher.Exists(dataKey(c.Hash))
 		mutex.Lock()
 		result[c.Path] = exists
 		mutex.Unlock()
@@ -192,7 +188,7 @@ func (d *Downloader) Fetch(hash string, attr ContentAttribute) ([]byte, error) {
 		return nil, fmt.Errorf("cannot fetch data, %s is not a hash", hash)
 	}
 	if hash == SumHash(nil) {
-		// 0 バイトのデータは置かれない
+		// 中身が 0 バイトなのはハッシュから分かるので、取得しない
 		return decode(nil, nil, attr)
 	}
 	data, err := d.fetchVerified(dataKey(hash), hash)

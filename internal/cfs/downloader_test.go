@@ -157,3 +157,33 @@ func TestManifestFromFile(t *testing.T) {
 		t.Errorf("cache must be loaded with its hash: %+v", m)
 	}
 }
+
+func TestEmptyDataIsUploaded(t *testing.T) {
+	// 圧縮も暗号化もしない空のファイルは、データも 0 バイトになる。それもキャビネットに置く
+	s, d, m := newTestDownloader(t, map[string]string{"empty.raw": "", "a.txt": "a"})
+	c := m.Contents["empty.raw"]
+	if c.Size != 0 || c.Hash != SumHash(nil) {
+		t.Fatalf("empty raw file must have 0-byte data: %+v", c)
+	}
+	if ok, _ := s.Exists(dataKey(c.Hash)); !ok {
+		t.Errorf("0-byte data must be uploaded")
+	}
+	if exists, _ := d.ExistsAll(m); !exists["empty.raw"] {
+		t.Errorf("ExistsAll must find 0-byte data")
+	}
+
+	// ls --verify では、ほかと同じく消えていれば ng になる
+	s.Delete([]string{dataKey(c.Hash)})
+	if exists, _ := d.ExistsAll(m); exists["empty.raw"] {
+		t.Errorf("ExistsAll must report missing 0-byte data")
+	}
+
+	// 取得するときは、中身が 0 バイトなのはハッシュから分かるので、キャビネットになくても空のファイルを作れる
+	out := t.TempDir()
+	if err := d.Sync(m, out); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(out, "empty.raw")); err != nil || len(data) != 0 {
+		t.Errorf("empty file must be synced: %q, %v", data, err)
+	}
+}

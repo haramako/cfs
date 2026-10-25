@@ -341,6 +341,7 @@ func TestS3RoundTrip(t *testing.T) {
 	addFile(src, "a.txt", "hello s3")
 	addFile(src, "sub/b.raw", "raw data")
 	addFile(src, "empty", "")
+	addFile(src, "empty.raw", "") // データも 0 バイトになる
 
 	manifest := NewManifest()
 	manifest.Tag = "v1"
@@ -362,7 +363,10 @@ func TestS3RoundTrip(t *testing.T) {
 	if err := d.Sync(loaded, out); err != nil {
 		t.Fatal(err)
 	}
-	for path, expect := range map[string]string{"a.txt": "hello s3", "sub/b.raw": "raw data", "empty": ""} {
+	if ok, _ := s.Exists(dataKey(SumHash(nil))); !ok {
+		t.Errorf("0-byte data must be uploaded to S3")
+	}
+	for path, expect := range map[string]string{"a.txt": "hello s3", "sub/b.raw": "raw data", "empty": "", "empty.raw": ""} {
 		data, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(path)))
 		if err != nil || string(data) != expect {
 			t.Errorf("synced %s must be %q but %q (%v)", path, expect, data, err)

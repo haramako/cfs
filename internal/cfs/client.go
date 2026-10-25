@@ -99,9 +99,9 @@ func (c *Client) Upload(filename string, origData []byte, attr ContentAttribute)
 		return "", 0, err
 	}
 
-	// 0 バイトのデータは置かない（ダウンロード側が空のファイルを作る）
+	// 0 バイトのデータ（圧縮も暗号化もしない空のファイル）も、ほかと同じく置く
 	key := dataKey(hash)
-	if len(data) > 0 && !c.queued[key] {
+	if !c.queued[key] {
 		c.queued[key] = true
 		c.queue <- uploadRequest{Filename: filename, Key: key, Data: data}
 	}

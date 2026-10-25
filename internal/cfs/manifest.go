@@ -215,13 +215,11 @@ func (m *Manifest) Dump(signer *SigningKey) []byte {
 	return buf.Bytes()
 }
 
-// DataHashes は、マニフェストが参照するデータのハッシュの一覧を返す（0 バイトのものは置かれないので除く）
+// DataHashes は、マニフェストが参照するデータのハッシュの一覧を返す
 func (m *Manifest) DataHashes() []string {
 	hashes := make([]string, 0, len(m.Contents))
 	for _, c := range m.Contents {
-		if c.Size > 0 {
-			hashes = append(hashes, c.Hash)
-		}
+		hashes = append(hashes, c.Hash)
 	}
 	return hashes
 }

@@ -45,7 +45,7 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
    - 前回の `Time + 1秒` 以前の mtime かつサイズ一致 → 読まずにスキップ
    - 読み込んで SHA-256（`OrigHash`）が一致 → 時刻だけ更新
    - それ以外 → `encode`（圧縮→暗号化）してキューに積む
-4. 32 並列の `uploadWorker` が `Storage.Put(data/..., overwrite=false)` を呼ぶ（既にあればバックエンド側でスキップ。0 バイトは置かない）
+4. 32 並列の `uploadWorker` が `Storage.Put(data/..., overwrite=false)` を呼ぶ（既にあればバックエンド側でスキップ。0 バイトのデータも置く）
 5. `RemoveUntouched` で今回見つからなかったエントリを削除（マニフェスト＝ディレクトリの完全なスナップショット）
 6. `Client.Finish`: アップロードの完了を待ち、失敗したものがあればマニフェストを置かずにエラーを返す。成功なら `UploadManifest`: マニフェスト（署名の鍵があれば署名付き）をエンコードして `manifest/` に置き、そのハッシュをタグ `tag/<name>` に書く。ローカルキャッシュと `<cache>.hash` も更新
 

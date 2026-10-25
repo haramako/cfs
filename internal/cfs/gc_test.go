@@ -300,3 +300,23 @@ func TestGCAbortsWithoutKey(t *testing.T) {
 		}
 	})
 }
+
+func TestGCKeepsEmptyData(t *testing.T) {
+	runGCTest(t, func(t *testing.T, g *gcTest) {
+		g.upload("v1", map[string]string{"empty.raw": ""})
+		old := g.upload("", map[string]string{"old.raw": "", "old.txt": "old"})
+		g.advance(20 * 24 * time.Hour)
+
+		for i := 0; i < 4; i++ {
+			g.advance(2 * time.Hour)
+			g.gc(false)
+		}
+		// 0 バイトのデータも参照として数えるので、タグのあるマニフェストが使う間は消さない
+		if !g.exists(dataKey(SumHash(nil))) {
+			t.Errorf("0-byte data used by a tagged manifest must be kept")
+		}
+		if g.exists(dataKey(old.Contents["old.txt"].Hash)) {
+			t.Errorf("data only used by the deleted manifest must be deleted")
+		}
+	})
+}

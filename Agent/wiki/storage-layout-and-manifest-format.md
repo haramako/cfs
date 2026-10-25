@@ -18,7 +18,7 @@
 |---|---|
 | キャビネットへの書き込み・一覧・削除 | `Storage`（`Put` / `Exists` / `List` / `Delete`）: `FileStorage`、`S3Storage`、`DummyStorage`（テスト用） |
 | キャビネットからの読み込み | `Fetcher`（`Open` / `Exists`）: `fileFetcher`、`httpFetcher`、`S3Storage`、`DummyStorage` |
-| アップロード | `Client`（`Init` で鍵と署名鍵を読む。`Upload` → 0 バイト以外を `data/` に Put。`UploadManifest` → `manifest/` に Put、手元キャッシュと `.hash`、タグ） |
+| アップロード | `Client`（`Init` で鍵と署名鍵を読む。`Upload` → `data/` に Put（0 バイトのデータも置く）。`UploadManifest` → `manifest/` に Put、手元キャッシュと `.hash`、タグ） |
 | 手元キャッシュの信用 | `Manifest.ValidateCache`（前回のマニフェストが `manifest/` にあるか 1 回確かめる。`cmd/cfs/main.go` の `doUpload` から呼ぶ） |
 | ダウンロード | `Downloader`（`ResolveLocation` → `LoadManifest` → `Fetch`） |
 | GC・タグ・キャビネット設定 | `gc.go`（`RunGC`、`ListTags`、`DeleteTags`、`LoadCabinetConfig` / `SaveCabinetConfig`、`ValidateTagName`） |
