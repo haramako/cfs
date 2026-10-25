@@ -10,7 +10,8 @@
 
 ## Items
 
-- [ ] ストレージのガーベージコレクション（`cfs gc`）とタグの整理（`cfs tag ls/rm`）を作る。ファイル一覧を `bucket/` に分ける形式変更を含む。計画は [discussions/2026-10-25-garbage-collection-plan.md](discussions/2026-10-25-garbage-collection-plan.md) (2026-10-25)
+- [ ] cfs の「バケット」を「マニフェスト」に改名する（コード・CLI・docs）。GC の形式変更と同時かその直前に。方針は [discussions/2026-10-25-rename-bucket-to-manifest.md](discussions/2026-10-25-rename-bucket-to-manifest.md) (2026-10-25)
+- [ ] ストレージのガーベージコレクション（`cfs gc`）とタグの整理（`cfs tag ls/rm`）を作る。マニフェストを `manifest/` に分ける形式変更と、`upload` が前回のマニフェストの存在を1回確かめる仕組みを含む。計画は [discussions/2026-10-25-garbage-collection-plan.md](discussions/2026-10-25-garbage-collection-plan.md) (2026-10-25)
 - [ ] `cfs http` を `cfs serve` に改名し、公開サーバーで動かせるようにする（用途は HTML などのアーティファクトの閲覧。認証は oauth2-proxy、XSS などの修正、ファイル一覧のキャッシュと ETag を最優先、ストリーミング・Range は後回し）。計画は [discussions/2026-10-25-public-serve-plan.md](discussions/2026-10-25-public-serve-plan.md) (2026-10-25)
 - [ ] S3 のリージョンを標準的に指定できるようにする（固定の `ap-northeast-1` をやめる）。計画は [discussions/2026-10-25-s3-region-plan.md](discussions/2026-10-25-s3-region-plan.md) (2026-10-25)
 - [ ] GCS（`gs://`）を実装から外す（当面はローカルと S3 だけ、後から足せる設計は保つ）。方針は [discussions/2026-10-25-storage-scope-file-and-s3-only.md](discussions/2026-10-25-storage-scope-file-and-s3-only.md) (2026-10-25)
