@@ -127,17 +127,13 @@ func loadConfig(c *cli.Command) {
 	}
 }
 
-// ダウンロード用のURLを取得する
-// Option.URL が指定されていない場合は、cabinetの情報から取得する
+// ダウンロード元を取得する
+// Option.Url が指定されていない場合は、キャビネット（手元のフォルダや S3）から直接読む
 func getDownloaderURL() string {
-	// 指定されているなら、それを返す
 	if cfs.Option.Url != "" {
 		return cfs.Option.Url
 	}
-	// cabinetからダウンロード用URLを取得する
-	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
-	check(err)
-	return storage.DownloaderUrl().String()
+	return cfs.Option.Cabinet
 }
 
 var uploadCommand = &cli.Command{

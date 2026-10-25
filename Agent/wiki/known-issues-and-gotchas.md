@@ -11,7 +11,7 @@
 - **`sync` は出力先の余分なファイルを消さない**。また全ファイルを毎回書き直す（データ取得はキャッシュされるが、書き込みは逐次）
 - **ダウンロード側の設定一致**: バケット自体は `DefaultContentAttribute()` でデコードされるので、ダウンロード側の `.cfsenv` の `Compress` / `EncryptKey` / `EncryptIv` がアップロード側と一致していないとバケットが読めない
 - **無圧縮拡張子はハードコード**: `.ab` `.raw` `.pbx` `.mp4`（`Bucket.GetAttribute`）
-- **S3**: リージョン `ap-northeast-1` 固定、ダウンロード URL は S3 静的サイトの http エンドポイント
+- **S3**: リージョンは `.cfsenv` の `S3Region` → HeadBucket の `x-amz-bucket-region`（匿名で問い合わせる）→ `AWS_REGION` / プロファイル → `ap-northeast-1` の順（`newS3Storage`）。`Exists` は 403 も「ない」扱い（ListBucket 権限がないと 404 が 403 になるため）
 - アップロードワーカーはエラー時に panic する（不完全なバケットをアップロードしないための意図的な挙動。2021-03 の修正）
 
 ## 不具合と思われるもの

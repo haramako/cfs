@@ -26,12 +26,12 @@
 
 ### バックエンドごとの URL
 
-| スキーム | 書き込み | `DownloaderUrl()` | 認証 |
+| スキーム | 書き込み | 読み込み | 認証 |
 |---|---|---|---|
-| `file:///path` | ローカルファイル書き込み | `file:///path/` | なし |
-| `s3://<bucket>` | aws-sdk-go-v2 で PutObject（ACL `bucket-owner-full-control`、既存チェックに ListObjectsV2） | `http://<bucket>.s3-website-ap-northeast-1.amazonaws.com/` | SDK 標準の認証チェーン（環境変数・共有設定・SSO・IAM ロール） |
+| `file:///path` やパス | ローカルファイル書き込み | ファイルを直接読む（`fileFetcher`） | なし |
+| `s3://<bucket>` | aws-sdk-go-v2 で PutObject（ACL `bucket-owner-full-control`、既存チェックに ListObjectsV2） | GetObject / HeadObject（`S3Storage` が `Fetcher` も実装） | SDK 標準の認証チェーン（環境変数・共有設定・SSO・IAM ロール） |
 
-S3 のリージョンは `ap-northeast-1` 固定（`AWS_REGION` より優先）。チェックサムは「必要な場合のみ」に設定して、旧実装と同じ素の PutObject にしている。認証情報は実際のリクエスト時まで検証されない（旧 goamz 実装は環境変数がないと `NewS3Storage` の時点でエラーだった）。`cfs://`（旧サーバー `cfssv`）は 2019-08 に削除済みで、`StorageFromUrl` も対応していない。
+S3 のリージョンは自動判定（詳細は known-issues-and-gotchas.md の S3 の項）。チェックサムは「必要な場合のみ」に設定して、旧実装と同じ素の PutObject にしている。認証情報は実際のリクエスト時まで検証されない（旧 goamz 実装は環境変数がないと `NewS3Storage` の時点でエラーだった）。`cfs://`（旧サーバー `cfssv`）は 2019-08 に削除済みで、`StorageFromUrl` も対応していない。
 
 ## ハッシュ
 

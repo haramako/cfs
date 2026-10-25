@@ -3,18 +3,25 @@ package cfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"net/url"
+	"io"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
+// DefaultS3Region は、リージョンをどこからも決められなかったときに使うリージョン
+const DefaultS3Region = "ap-northeast-1"
+
+// S3Storage は Amazon S3 のバケットをキャビネットにする。書き込み（Storage）と読み込み（Fetcher）の両方を行う
 type S3Storage struct {
 	BucketName string
-	cabinetUrl *url.URL
+	Region     string
 	client     *s3.Client
 }
 
@@ -24,31 +31,57 @@ func NewS3Storage(bucketName string) (*S3Storage, error) {
 
 // optFns はテストでエンドポイントを差し替えるために使う
 func newS3Storage(bucketName string, optFns ...func(*s3.Options)) (*S3Storage, error) {
-	s := &S3Storage{
-		BucketName: bucketName,
-	}
+	ctx := context.Background()
 
 	// 単純な PutObject にするため、チェックサムは必要な場合だけ付ける
-	cfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion("ap-northeast-1"),
+	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	s.client = s3.NewFromConfig(cfg, optFns...)
-
-	s.cabinetUrl, err = url.Parse("http://" + s.BucketName + ".s3-website-ap-northeast-1.amazonaws.com/")
-	if err != nil {
-		return nil, err
+	// リージョンは .cfsenv の S3Region → バケットから自動判定 → AWS 標準の設定 → 既定値 の順に決める
+	region := Option.S3Region
+	if region == "" {
+		region = detectBucketRegion(ctx, cfg, bucketName, optFns)
+	}
+	if region == "" {
+		region = cfg.Region
+	}
+	if region == "" {
+		region = DefaultS3Region
+	}
+	if Verbose {
+		fmt.Printf("using S3 bucket '%s' in region '%s'\n", bucketName, region)
 	}
 
-	return s, nil
+	client := s3.NewFromConfig(cfg, append([]func(*s3.Options){func(o *s3.Options) { o.Region = region }}, optFns...)...)
+
+	return &S3Storage{BucketName: bucketName, Region: region, client: client}, nil
 }
 
-func (s *S3Storage) DownloaderUrl() *url.URL {
-	return s.cabinetUrl
+// detectBucketRegion は、バケットのリージョンを HeadBucket の x-amz-bucket-region から調べる。
+// このヘッダーは権限がなく 403 が返る場合にも付くので、認証なしで問い合わせる。分からなければ空を返す
+func detectBucketRegion(ctx context.Context, cfg aws.Config, bucketName string, optFns []func(*s3.Options)) string {
+	probeRegion := cfg.Region
+	if probeRegion == "" {
+		probeRegion = "us-east-1"
+	}
+	client := s3.NewFromConfig(cfg, append([]func(*s3.Options){func(o *s3.Options) {
+		o.Region = probeRegion
+		o.Credentials = aws.AnonymousCredentials{}
+	}}, optFns...)...)
+
+	out, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucketName)})
+	if err == nil {
+		return aws.ToString(out.BucketRegion)
+	}
+	var re *smithyhttp.ResponseError
+	if errors.As(err, &re) && re.Response != nil {
+		return re.Response.Header.Get("x-amz-bucket-region")
+	}
+	return ""
 }
 
 func (s *S3Storage) Upload(filename string, hash string, body []byte, overwrite bool) error {
@@ -107,4 +140,45 @@ func (s *S3Storage) put(ctx context.Context, path string, body []byte) error {
 		ACL:         types.ObjectCannedACLBucketOwnerFullControl,
 	})
 	return err
+}
+
+// Open は S3 からデータを直接読む（Fetcher）
+func (s *S3Storage) Open(path string) (io.ReadCloser, error) {
+	out, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
+		Bucket: aws.String(s.BucketName),
+		Key:    aws.String(path),
+	})
+	if err != nil {
+		var noSuchKey *types.NoSuchKey
+		if errors.As(err, &noSuchKey) || s3StatusCode(err) == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: s3://%s/%s", ErrNotFound, s.BucketName, path)
+		}
+		return nil, fmt.Errorf("cannot read s3://%s/%s: %w", s.BucketName, path, err)
+	}
+	return out.Body, nil
+}
+
+// Exists は S3 にデータがあるかを返す（Fetcher）
+func (s *S3Storage) Exists(path string) (bool, error) {
+	_, err := s.client.HeadObject(context.Background(), &s3.HeadObjectInput{
+		Bucket: aws.String(s.BucketName),
+		Key:    aws.String(path),
+	})
+	if err == nil {
+		return true, nil
+	}
+	// s3:ListBucket の権限がないと、ないオブジェクトへの HeadObject は 404 ではなく 403 になる
+	switch s3StatusCode(err) {
+	case http.StatusNotFound, http.StatusForbidden:
+		return false, nil
+	}
+	return false, err
+}
+
+func s3StatusCode(err error) int {
+	var re *smithyhttp.ResponseError
+	if errors.As(err, &re) && re.Response != nil {
+		return re.Response.StatusCode
+	}
+	return 0
 }

@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -19,12 +18,6 @@ func NewFileStorage(cabinetPath string) (*FileStorage, error) {
 		return nil, err
 	}
 	return &FileStorage{CabinetPath: abs}, nil
-}
-
-func (s *FileStorage) DownloaderUrl() *url.URL {
-	u := PathToFileURL(s.CabinetPath)
-	u.Path += "/"
-	return u
 }
 
 func (s *FileStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {

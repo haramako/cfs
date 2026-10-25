@@ -2,7 +2,6 @@ package cfs
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 
 	"path/filepath"
@@ -49,6 +48,9 @@ func setupBucket() (*Client, *Bucket, string) {
 	return client, bucket, dir
 }
 
+// testCabinet は、最後に newStorage で作ったキャビネットの場所
+var testCabinet string
+
 func newStorage(bucket *Bucket) Storage {
 	var uri string
 	switch os.Getenv("CFS_TEST_STORAGE") {
@@ -66,6 +68,7 @@ func newStorage(bucket *Bucket) Storage {
 	if err != nil {
 		panic(err)
 	}
+	testCabinet = uri
 	return storage
 }
 
@@ -81,8 +84,8 @@ func setupBucketWithFiles() (*Client, *Bucket, string) {
 	return c, b, dir
 }
 
-func setupBucketFromURL(baseURL *url.URL, location string) (*Downloader, *Bucket) {
-	downloader, err := NewDownloader(baseURL.String())
+func setupBucketFromURL(cabinet string, location string) (*Downloader, *Bucket) {
+	downloader, err := NewDownloader(cabinet)
 	if err != nil {
 		panic(err)
 	}
@@ -196,7 +199,7 @@ func TestCompress(t *testing.T) {
 		return
 	}
 
-	d, b2 := setupBucketFromURL(c.Storage.DownloaderUrl(), b.Hash)
+	d, b2 := setupBucketFromURL(testCabinet, b.Hash)
 	if b2 == nil {
 		return // なにもしない
 	}

@@ -2,13 +2,11 @@ package cfs
 
 import (
 	"fmt"
-	"net/url"
 	"sync"
 )
 
 type DummyStorage struct {
 	CabinetPath string
-	rootUrl     *url.URL
 	mutex       sync.Mutex // Upload は複数のワーカーから並列に呼ばれる
 	contents    map[string][]byte
 	tags        map[string][]byte
@@ -24,10 +22,6 @@ func NewDummyStorage(cabinetPath string) (*DummyStorage, error) {
 	}
 
 	return s, nil
-}
-
-func (s *DummyStorage) DownloaderUrl() *url.URL {
-	return s.rootUrl
 }
 
 func (s *DummyStorage) Upload(filename string, hash string, body []byte, overwrite bool) error {

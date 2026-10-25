@@ -26,7 +26,8 @@ CFS の設定は2種類あります。
 | キー | 既定値 | 内容 |
 |---|---|---|
 | `Cabinet` | `file:///var/cfs` | アップロード先。`s3://` や `file://` の URL か、手元のパス（相対パスは `.cfsenv` のあるフォルダが基準）。[ストレージ](storage-backends.md) を参照 |
-| `Url` | （空） | ダウンロード元。URL か手元のパス。空なら `Cabinet` から自動で決まります（[ストレージ](storage-backends.md) を参照） |
+| `Url` | （空） | ダウンロード元。URL か手元のパス。空ならキャビネットから直接読みます（[ストレージ](storage-backends.md) を参照） |
+| `S3Region` | （空） | S3 のリージョン。空ならバケットから自動で調べます（[ストレージ](storage-backends.md#リージョン) を参照） |
 | `Compress` | `true` | zlib で圧縮するか |
 | `EncryptKey` | （空） | AES の鍵。16、24、32 バイトのどれか。空なら暗号化しません |
 | `EncryptIv` | （空） | AES の IV。16 バイト |

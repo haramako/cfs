@@ -49,6 +49,9 @@ func NewFetcher(location string) (Fetcher, error) {
 			return nil, err
 		}
 		return &fileFetcher{root: root}, nil
+	case "s3":
+		// HTTP で公開しなくても、S3 から直接読む
+		return NewS3Storage(u.Host)
 	default:
 		return nil, fmt.Errorf("unsupported download location %v", location)
 	}

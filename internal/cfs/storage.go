@@ -6,7 +6,6 @@ import (
 )
 
 type Storage interface {
-	DownloaderUrl() *url.URL
 	Upload(filename string, hash string, body []byte, overwrite bool) error
 	UploadTag(filename string, body []byte) error
 }

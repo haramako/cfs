@@ -19,7 +19,10 @@ type OptionInfo struct {
 
 	// common setting
 	Cabinet string // アップロード先のURL
-	Url     string // ダウンロード先のURL
+	Url     string // ダウンロード元。空ならキャビネットから直接読む
+
+	// S3 のリージョン。空ならバケットから自動で判定する
+	S3Region string
 }
 
 var Option = &OptionInfo{
