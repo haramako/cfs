@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-25 [Windows で file:// から取得できない不具合の修正（計画）](2026-10-25-fix-windows-file-download-plan.md) — **修正する方針で決定**。原因は `http.Dir("")` による相対パス解決。`file://` は `Fetcher` の file 実装で直接読む。スキップ中の `TestCompress` を有効にして windows CI で確認する
 - 2026-10-25 [暗号化の改善（計画）](2026-10-25-encryption-improvement-plan.md) — `.ab` 無暗号・IV 固定・改ざん対策なしを確認。A 署名+HTTPS、B 未公開コンテンツの鍵を後から配る、C ファイルごとの IV と鍵の入れ替え、D 配信の認証、E 難読化。A と C は cfs だけで実装、B は別件。**互換性は当面不要（オーナー指示）**。追記: `.ab` 無暗号は実行時コストのため意図的
 - 2026-10-25 [暗号鍵の環境変数での上書きと認証方法の説明（計画）](2026-10-25-encrypt-key-env-override-plan.md) — 認証情報は SDK 標準で問題なし。暗号鍵を `.cfsenv` 以外（環境変数）から渡せるようにする計画。認証方法の説明は `docs/storage-backends.md` に記載済み
 - 2026-10-25 [S3 から HTTP 公開なしで sync する計画（検討中）](2026-10-25-s3-direct-sync-plan.md) — `Downloader` の取得部分を `Fetcher` に切り出し、`Url` が `s3://` のときだけ GetObject / HeadObject で取得する案。`Url` 未指定時の挙動は据え置き。実装は追加相談の後
