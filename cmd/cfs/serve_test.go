@@ -76,7 +76,7 @@ func get(t *testing.T, client *http.Client, url string, header map[string]string
 var noRedirect = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
 func TestServeFile(t *testing.T) {
-	_, hs, _ := setupServe(t, map[string]string{"docs/index.html": "<h1>hello</h1>", "docs/a.css": "body{}", "raw.bin": "binary", "report.htm": "日本語"})
+	_, hs, _ := setupServe(t, map[string]string{"docs/index.html": "<h1>hello</h1>", "docs/a.css": "body{}", "raw.bin": "binary", "report.htm": "日本語", "README.md": "# 見出し"})
 
 	res, body := get(t, noRedirect, hs.URL+"/v1/docs/a.css", nil)
 	if res.StatusCode != 200 || body != "body{}" || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/css") {
@@ -100,6 +100,12 @@ func TestServeFile(t *testing.T) {
 	res, _ = get(t, noRedirect, hs.URL+"/v1/raw.bin", nil)
 	if res.Header.Get("Content-Type") != "application/octet-stream" {
 		t.Errorf("unknown type must be octet-stream but %q", res.Header.Get("Content-Type"))
+	}
+
+	// Markdown は、ブラウザで読めるように UTF-8 のテキストとして返す
+	res, _ = get(t, noRedirect, hs.URL+"/v1/README.md", nil)
+	if res.Header.Get("Content-Type") != "text/markdown; charset=utf-8" {
+		t.Errorf(".md must be text/markdown but %q", res.Header.Get("Content-Type"))
 	}
 
 	// .htm は特別扱いしない（Shift_JIS にしない）
@@ -134,7 +140,7 @@ func TestServeDirectory(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("directory listing must be 200 but %d", res.StatusCode)
 	}
-	if !strings.Contains(body, "b.txt") || !strings.Contains(body, "a&amp;b.txt") {
+	if !strings.Contains(body, "b.txt") || !strings.Contains(body, "a&amp;b.txt") || !strings.Contains(body, "<h1>v1/dir/</h1>") {
 		t.Errorf("listing must contain escaped names: %s", body)
 	}
 }
@@ -142,7 +148,7 @@ func TestServeDirectory(t *testing.T) {
 func TestRenderDirectoryEscapesNames(t *testing.T) {
 	// Windows ではファイル名に使えない文字も、マニフェストには書けるので確かめる
 	rec := httptest.NewRecorder()
-	err := renderDirectory(rec, "dir", []cfs.Content{{Path: `dir/<script>alert(1)</script>".txt`}})
+	err := renderDirectory(rec, "v1", "dir", []cfs.Content{{Path: `dir/<script>alert(1)</script>".txt`}})
 	if err != nil {
 		t.Fatal(err)
 	}

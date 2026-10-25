@@ -199,7 +199,7 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request) error {
 	if hasIndex {
 		return s.serveFile(w, r, m.Contents[indexPath], immutable)
 	}
-	return renderDirectory(w, filePath, children)
+	return renderDirectory(w, tag, filePath, children)
 }
 
 func (s *server) serveFile(w http.ResponseWriter, r *http.Request, content cfs.Content, immutable bool) error {
@@ -208,7 +208,7 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, content cfs.C
 		return err
 	}
 
-	mimetype := mime.TypeByExtension(filepath.Ext(content.Path))
+	mimetype := contentType(content.Path)
 	if mimetype == "" {
 		mimetype = "application/octet-stream"
 	}
@@ -228,6 +228,22 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, content cfs.C
 	// ServeContent が If-None-Match（304）と Range を処理する
 	http.ServeContent(w, r, path.Base(content.Path), content.Time, bytes.NewReader(data))
 	return nil
+}
+
+// textTypes は、OS の設定（Windows のレジストリや /etc/mime.types）に左右されずに、
+// ブラウザでそのまま読めるように返す種類。文字コードは UTF-8 とみなす
+var textTypes = map[string]string{
+	".md":       "text/markdown; charset=utf-8",
+	".markdown": "text/markdown; charset=utf-8",
+	".txt":      "text/plain; charset=utf-8",
+}
+
+func contentType(name string) string {
+	ext := strings.ToLower(filepath.Ext(name))
+	if t, ok := textTypes[ext]; ok {
+		return t
+	}
+	return mime.TypeByExtension(ext)
 }
 
 // getTagAndPath は、ホスト名とパスから、タグとファイルのパスを取り出す
@@ -275,9 +291,9 @@ func getDirectoryContentList(b *cfs.Manifest, dir string) []cfs.Content {
 
 var directoryTemplate = template.Must(template.New("dir").Parse(`<!DOCTYPE html>
 <html lang="ja">
-<head><meta charset="utf-8"><title>{{.Dir}}/</title></head>
+<head><meta charset="utf-8"><title>{{.Title}}</title></head>
 <body>
-<h1>{{.Dir}}/</h1>
+<h1>{{.Title}}</h1>
 <table>
 <tr><th>Path</th><th>Size</th><th>Date</th><th>Hash</th></tr>
 {{range .Files}}<tr><td><a href="{{.Href}}">{{.Name}}</a></td><td align="right">{{.Size}}</td><td>{{.Time}}</td><td>{{.Hash}}</td></tr>
@@ -294,7 +310,7 @@ type directoryFile struct {
 	Hash string
 }
 
-func renderDirectory(w http.ResponseWriter, dir string, list []cfs.Content) error {
+func renderDirectory(w http.ResponseWriter, tag string, dir string, list []cfs.Content) error {
 	files := make([]directoryFile, 0, len(list))
 	for _, f := range list {
 		name := strings.TrimLeft(f.Path[len(dir):], "/")
@@ -309,9 +325,9 @@ func renderDirectory(w http.ResponseWriter, dir string, list []cfs.Content) erro
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	return directoryTemplate.Execute(w, struct {
-		Dir   string
+		Title string
 		Files []directoryFile
-	}{Dir: dir, Files: files})
+	}{Title: path.Join(tag, dir) + "/", Files: files})
 }
 
 type statusRecorder struct {
