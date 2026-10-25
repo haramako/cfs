@@ -15,6 +15,17 @@ import (
 
 type Downloader struct {
 	fetcher Fetcher
+
+	formatOnce sync.Once
+	formatErr  error
+}
+
+// checkFormat は、最初の 1 回だけキャビネットの形式の版を確かめる
+func (d *Downloader) checkFormat() error {
+	d.formatOnce.Do(func() {
+		d.formatErr = CheckCabinetFormat(d.fetcher)
+	})
+	return d.formatErr
 }
 
 // NewDownloader は、ダウンロード元（URL か手元のパス）からデータを読む Downloader を作る
@@ -46,6 +57,10 @@ func (d *Downloader) ResolveLocation(location string) (string, error) {
 // LoadManifest は、ロケーション（タグ名かマニフェストのハッシュ）のマニフェストを読む。
 // .cfsenv に VerifyKeys があれば、署名を確かめる
 func (d *Downloader) LoadManifest(location string) (*Manifest, error) {
+	if err := d.checkFormat(); err != nil {
+		return nil, err
+	}
+
 	hash, err := d.ResolveLocation(location)
 	if err != nil {
 		return nil, err

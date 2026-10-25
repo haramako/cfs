@@ -25,6 +25,12 @@ go install github.com/haramako/cfs/cmd/cfs@latest
 }
 ```
 
+キャビネットを作ります（S3 のバケットを、非公開などの cfs に合った設定で作ります。既にあれば設定だけを確かめます）。
+
+```
+cfs cabinet init
+```
+
 フォルダをアップロードして、`v1` というタグを付けます。
 
 ```

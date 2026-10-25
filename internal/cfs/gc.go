@@ -33,9 +33,31 @@ const (
 	DefaultGCInterval = time.Hour
 )
 
+// CabinetFormat は、このプログラムが扱うキャビネットの形式の版
+const CabinetFormat = 2
+
 // CabinetConfig は、キャビネットに置く設定（config.json）
 type CabinetConfig struct {
+	Format    int    `json:"format,omitempty"`    // キャビネットの形式の版（cfs cabinet init で書く。0 は書かれていない）
 	Retention string `json:"retention,omitempty"` // 保持期間（例: "30d"、"720h"）
+}
+
+// CheckFormat は、キャビネットの形式の版がこのプログラムで扱えるかを確かめる。
+// config.json がない、または版が書かれていないキャビネットは、今の版として扱う
+func (c *CabinetConfig) CheckFormat() error {
+	if c.Format != 0 && c.Format != CabinetFormat {
+		return fmt.Errorf("unsupported cabinet format %d (this cfs supports format %d)", c.Format, CabinetFormat)
+	}
+	return nil
+}
+
+// CheckCabinetFormat は、キャビネットの config.json を読み、形式の版を確かめる
+func CheckCabinetFormat(f Fetcher) error {
+	cfg, err := LoadCabinetConfig(f)
+	if err != nil {
+		return err
+	}
+	return cfg.CheckFormat()
 }
 
 // RetentionDuration は保持期間を返す
@@ -80,6 +102,9 @@ func LoadCabinetConfig(f Fetcher) (*CabinetConfig, error) {
 
 // SaveCabinetConfig は、キャビネットの設定を書く
 func SaveCabinetConfig(s Storage, cfg *CabinetConfig) error {
+	if err := cfg.CheckFormat(); err != nil {
+		return err
+	}
 	if _, err := cfg.RetentionDuration(); err != nil {
 		return err
 	}
@@ -167,12 +192,15 @@ func RunGC(s Storage, f Fetcher, opt GCOptions) (*GCResult, error) {
 	if interval == 0 {
 		interval = DefaultGCInterval
 	}
+	cfg, err := LoadCabinetConfig(f)
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.CheckFormat(); err != nil {
+		return nil, err
+	}
 	retention := opt.Retention
 	if retention == 0 {
-		cfg, err := LoadCabinetConfig(f)
-		if err != nil {
-			return nil, err
-		}
 		if retention, err = cfg.RetentionDuration(); err != nil {
 			return nil, err
 		}

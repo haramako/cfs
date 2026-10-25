@@ -38,7 +38,13 @@
 
 手元の PC では、長く使うアクセスキーをファイルに置くより、SSO を使う方法をおすすめします。
 
-必要な権限は次のとおりです。
+### バケットの作成
+
+`cfs cabinet init` で、cfs に合った設定のバケットを作れます（非公開、ACL 無効、バージョニングなし）。既にあるバケットに実行すると、設定だけを揃えます。詳しくは [コマンド](commands.md#cabinet-init) を見てください。
+
+### 権限
+
+用途ごとの IAM ポリシーは `cfs cabinet policy upload|download|gc|admin` で表示できます。必要な権限の内訳は次のとおりです。
 
 | 権限 | 用途 |
 |---|---|
@@ -48,7 +54,7 @@
 | `s3:GetObject` | S3 から直接ダウンロードするとき、`upload` で前回のマニフェストを確かめるとき |
 | `s3:DeleteObject` | `cfs gc` と `cfs tag rm` |
 
-`cfs gc` は、`s3:ListBucket`、`s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` を使います。
+`cfs gc` は、`s3:ListBucket`、`s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` を使います。`cfs cabinet init` は、加えて `s3:CreateBucket`、`s3:PutBucketPublicAccessBlock`、`s3:PutBucketOwnershipControls` を使います。
 
 **バージョニングが有効なバケット**では、消しても「削除マーカー」が付くだけで容量は減りません。古いバージョンを消すライフサイクルルール（「以前のバージョンの有効期限」）を合わせて設定してください。
 

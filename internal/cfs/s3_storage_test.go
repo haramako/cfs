@@ -39,6 +39,12 @@ type fakeS3 struct {
 	headBuckets int
 	puts        []fakeS3Put
 	signRegions []string // 署名に使われたリージョン
+
+	url               string   // 偽サーバーの URL
+	bucketOwner       string   // CreateBucket の結果。"" ならまだない、"me" なら自分の、"other" なら他人の
+	createBucket      []string // CreateBucket の本文
+	publicAccessBlock string
+	ownershipControls string
 }
 
 var credentialRegion = regexp.MustCompile(`Credential=[^/]+/[0-9]+/([^/]+)/s3/`)
@@ -79,6 +85,27 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				k, len(f.objects[k]), f.modified[k].UTC().Format(time.RFC3339))
 		}
 		io.WriteString(w, `</ListBucketResult>`)
+	case key == "" && r.Method == http.MethodPut && r.URL.Query().Has("publicAccessBlock"):
+		body, _ := io.ReadAll(r.Body)
+		f.publicAccessBlock = string(body)
+	case key == "" && r.Method == http.MethodPut && r.URL.Query().Has("ownershipControls"):
+		body, _ := io.ReadAll(r.Body)
+		f.ownershipControls = string(body)
+	case key == "" && r.Method == http.MethodPut:
+		// CreateBucket
+		if f.bucketOwner != "" {
+			code := "BucketAlreadyOwnedByYou"
+			if f.bucketOwner == "other" {
+				code = "BucketAlreadyExists"
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusConflict)
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>%s</Code><Message>exists</Message></Error>`, code)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		f.createBucket = append(f.createBucket, string(body))
+		f.bucketOwner = "me"
 	case key == "" && r.Method == http.MethodPost && r.URL.Query().Has("delete"):
 		var req struct {
 			Objects []struct{ Key string } `xml:"Object"`
@@ -132,6 +159,7 @@ func setupFakeS3(t *testing.T, region string) (*fakeS3, *S3Storage) {
 	fake := &fakeS3{region: region, objects: map[string][]byte{}, modified: map[string]time.Time{}}
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
+	fake.url = server.URL
 
 	s, err := newS3Storage("bkt", func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(server.URL)

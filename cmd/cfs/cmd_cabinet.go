@@ -124,6 +124,31 @@ var cabinetCommand = &cli.Command{
 	Usage: "manage cabinet settings",
 	Commands: []*cli.Command{
 		{
+			Name:   "init",
+			Usage:  "create the cabinet (S3 bucket or local folder) and write config.json",
+			Action: doCabinetInit,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "region",
+					Usage: "S3 region (default: S3Region in .cfsenv, AWS_REGION or profile, then ap-northeast-1)",
+				},
+				&cli.StringFlag{
+					Name:  "retention",
+					Usage: "GC retention period like 30d (default: keep the current setting, or 30d)",
+				},
+				&cli.BoolFlag{
+					Name:  "dry-run",
+					Usage: "show what would be done without doing it",
+				},
+			},
+		},
+		{
+			Name:      "policy",
+			Usage:     "print an IAM policy for an S3 cabinet (roles: upload, download, gc, admin)",
+			ArgsUsage: "role",
+			Action:    doCabinetPolicy,
+		},
+		{
 			Name:   "config",
 			Usage:  "show cabinet config",
 			Action: doCabinetConfig,
@@ -171,6 +196,45 @@ func doCabinetConfigSet(_ context.Context, c *cli.Command) error {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	return nil
+}
+
+func doCabinetInit(_ context.Context, c *cli.Command) error {
+	loadConfig(c)
+	opt := cfs.InitOptions{
+		Region:    c.String("region"),
+		Retention: c.String("retention"),
+		DryRun:    c.Bool("dry-run"),
+	}
+	steps, err := cfs.InitCabinet(cfs.Option.Cabinet, opt)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if opt.DryRun {
+		fmt.Printf("would init cabinet %s:\n", cfs.Option.Cabinet)
+	} else {
+		fmt.Printf("init cabinet %s:\n", cfs.Option.Cabinet)
+	}
+	for _, s := range steps {
+		fmt.Printf("  %s\n", s)
+	}
+	return nil
+}
+
+func doCabinetPolicy(_ context.Context, c *cli.Command) error {
+	loadConfig(c)
+	args := c.Args().Slice()
+	if len(args) != 1 {
+		fmt.Println("need just 1 argument (upload, download, gc, admin)")
+		os.Exit(1)
+	}
+	policy, err := cfs.IAMPolicy(cfs.Option.Cabinet, args[0])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	fmt.Println(string(policy))
 	return nil
 }
 

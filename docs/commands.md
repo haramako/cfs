@@ -158,7 +158,46 @@ cfs tag rm タグ [タグ...]
 
 タグの一覧（名前、指しているマニフェストのハッシュ、更新日時）を表示します。`rm` はタグを消します。マニフェストと中身は、その後の `gc` で消えます。
 
-### `cabinet`
+### `cabinet init`
+
+```
+cfs cabinet init [--region リージョン] [--retention 期間] [--dry-run]
+```
+
+`.cfsenv` の `Cabinet`（または `-c`）のキャビネットを作ります。何度実行しても大丈夫です。
+
+- **S3（`s3://<バケット名>`）の場合**
+  1. バケットを作ります。リージョンは `--region` → `.cfsenv` の `S3Region` → `AWS_REGION` やプロファイルの設定 → `ap-northeast-1` の順で決めます。自分のバケットが既にあれば、そのまま使います。他の人が使っている名前ならエラーになります
+  2. パブリックアクセスをすべてブロックします（cfs は S3 から直接読むので、公開は不要です）
+  3. ACL を無効にします（オブジェクト所有者を「バケット所有者の強制」に）
+  4. `config.json`（形式の版と保持期間）を置きます
+  - バージョニングは有効にしません（GC で消しても容量が減らなくなるため）
+- **手元のフォルダの場合**: フォルダを作り、`config.json` を置きます
+
+| オプション | 内容 |
+|---|---|
+| `--region` | S3 のリージョン |
+| `--retention` | GC の保持期間（例: `30d`）。省略すると、今の設定（なければ `30d`）のまま |
+| `--dry-run` | 何もせず、何をするかを表示します |
+
+管理者が一度だけ実行する想定です。必要な権限は `cfs cabinet policy admin` で表示できます。
+
+### `cabinet policy`
+
+```
+cfs cabinet policy upload|download|gc|admin
+```
+
+S3 のキャビネットを使うのに必要な IAM ポリシーを、用途ごとに JSON で表示します。IAM のユーザーやロールにそのまま付けられます。
+
+| 用途 | 内容 |
+|---|---|
+| `download` | `sync` や `serve` で読むだけ（`s3:GetObject`） |
+| `upload` | `upload` と `merge`（読み込みも含む） |
+| `gc` | `gc` と `tag rm`（削除を含む） |
+| `admin` | `cabinet init`（バケットの作成と設定） |
+
+### `cabinet config`
 
 ```
 cfs cabinet config

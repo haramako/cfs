@@ -59,3 +59,12 @@ cfs cabinet init [--region リージョン] [--retention 30d] [--dry-run]
 1. コマンド名は `cfs cabinet init` でよいか
 2. 非公開（パブリックアクセスブロック有効）と ACL 無効を、選べないようにしてよいか（公開したい場合は CloudFront を使う前提）
 3. あわせて、用途ごと（アップロード用・ダウンロード用・GC 用）の IAM ポリシーの JSON を表示するコマンド（例: `cfs cabinet policy upload`）も作るか
+
+## 追記（2026-10-25）: 実装した
+
+オーナーが未決事項 1〜3 をすべて了承（コマンド名 `cfs cabinet init`、非公開と ACL 無効は固定、IAM ポリシーを表示するコマンドも作る）。計画どおり実装した。
+
+- `cfs cabinet init [--region] [--retention] [--dry-run]`（`internal/cfs/cabinet_init.go`）。S3 はバケット作成 → パブリックアクセスブロック → ACL 無効 → `config.json`。ローカルはフォルダ作成 → `config.json`。既存の保持期間は `--retention` を指定しない限り残す
+- `cfs cabinet policy upload|download|gc|admin`（`IAMPolicy`）。download は `s3:GetObject` だけ
+- `config.json` に `format: 2`。`format` が 2 以外のキャビネットは、`upload`・ダウンロード（`LoadManifest`）・`gc`・`cabinet config set`・`cabinet init` で拒否する。書かれていなければ v2 として扱う
+- S3 の偽サーバーに CreateBucket・PutPublicAccessBlock・PutBucketOwnershipControls を足してテストした。実際の S3 ではまだ試していない

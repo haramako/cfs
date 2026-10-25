@@ -4,7 +4,7 @@
 
 ## コマンドの定義場所
 
-- `cmd/cfs/main.go` の `app.Commands` が一覧。`upload` / `sync` / `merge` / `cat` / `ls` / `config` / `setting` は `main.go`、`serve` は `cmd_serve.go`、`pack` 系は `cmd_pack*.go` / `cmd_unpack.go` / `cmd_patch.go`、`gc` / `tag` / `cabinet` / `keygen` は `cmd_cabinet.go`
+- `cmd/cfs/main.go` の `app.Commands` が一覧。`upload` / `sync` / `merge` / `cat` / `ls` / `config` / `setting` は `main.go`、`serve` は `cmd_serve.go`、`pack` 系は `cmd_pack*.go` / `cmd_unpack.go` / `cmd_patch.go`、`gc` / `tag` / `cabinet`（`init` / `policy` / `config`）/ `keygen` は `cmd_cabinet.go`
 - CLI は urfave/cli v3。コマンドのフラグは引数の後ろにも書ける（`cfs upload src -t v1`）。グローバルオプションもサブコマンドの後ろに書ける（`cfs upload -V src`）。サブコマンドの入れ子（`tag ls`、`cabinet config set`）は `Commands` で書く
 - 各コマンドの先頭で `loadConfig` を呼ぶ: `InitDefaultSetting` → `-V` → `LoadDefaultOptions`（`.cfsenv` → 環境変数）→ `--cabinet` / `--url`（今いるフォルダ基準で `ResolveLocation`）→ `--force`
 - エラーの多くは `check(err)` で panic する（スタックトレースが出る）。利用者向けのエラー（タグ名、設定の誤りなど）は `fmt.Println` + `os.Exit(1)`

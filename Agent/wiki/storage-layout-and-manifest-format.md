@@ -22,6 +22,8 @@
 | 手元キャッシュの信用 | `Manifest.ValidateCache`（前回のマニフェストが `manifest/` にあるか 1 回確かめる。`cmd/cfs/main.go` の `doUpload` から呼ぶ） |
 | ダウンロード | `Downloader`（`ResolveLocation` → `LoadManifest` → `Fetch`） |
 | GC・タグ・キャビネット設定 | `gc.go`（`RunGC`、`ListTags`、`DeleteTags`、`LoadCabinetConfig` / `SaveCabinetConfig`、`ValidateTagName`） |
+| 形式の版 | `config.json` の `format`（`CabinetFormat = 2`）。`CabinetConfig.CheckFormat` が、0（書かれていない）か 2 以外を拒否する。`Downloader.LoadManifest`（最初の 1 回だけ）、`doUpload`、`RunGC`、`SaveCabinetConfig` で確かめる |
+| キャビネットの作成・IAM ポリシー | `cabinet_init.go`（`InitCabinet`、`initS3Cabinet`、`IAMPolicy`）。S3 は CreateBucket → PutPublicAccessBlock（4 項目すべて true）→ PutBucketOwnershipControls（`BucketOwnerEnforced`）→ `config.json`。`BucketAlreadyOwnedByYou` は続行、`BucketAlreadyExists` はエラー。dry-run は `dryRunFetcher` で何も読まない |
 
 ## バックエンドごとの実装
 

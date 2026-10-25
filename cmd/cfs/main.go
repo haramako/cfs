@@ -223,6 +223,14 @@ func doUpload(_ context.Context, c *cli.Command) error {
 	storage, err := cfs.StorageFromString(cfs.Option.Cabinet)
 	check(err)
 
+	// 形式の版が違うキャビネットには書かない
+	cabinetFetcher, err := cfs.NewFetcher(cfs.Option.Cabinet)
+	check(err)
+	if err := cfs.CheckCabinetFormat(cabinetFetcher); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	var manifest *cfs.Manifest
 	if !cfs.Option.NoCache {
 		manifest, err = cfs.ManifestFromFile(manifestPath)
