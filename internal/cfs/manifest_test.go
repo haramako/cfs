@@ -54,7 +54,12 @@ func newStorage(manifest *Manifest) Storage {
 	var uri string
 	switch os.Getenv("CFS_TEST_STORAGE") {
 	case "s3":
-		uri = "s3://cfs-autotest"
+		// 本物の S3 で試すときのバケット名は、リポジトリに含めない（.cfs-test.env などから環境変数で渡す）
+		bucket := os.Getenv("CFS_TEST_S3_BUCKET")
+		if bucket == "" {
+			panic("CFS_TEST_STORAGE=s3 needs CFS_TEST_S3_BUCKET (see docs/development.md)")
+		}
+		uri = "s3://" + bucket
 	default:
 		tempDir, err := os.MkdirTemp("", "cfs-file")
 		if err != nil {

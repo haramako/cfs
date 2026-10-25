@@ -56,13 +56,48 @@ go vet ./...
 
 通常のテストは、一時フォルダを使ったローカルのストレージで動きます。S3 のテストは、偽の HTTP サーバーを相手にするので、認証情報は不要です。
 
-本物の S3 を相手にテストすることもできます（認証情報が必要です）。
-
-```
-CFS_TEST_STORAGE=s3  go test ./internal/cfs     # s3://cfs-autotest を使います
-```
-
 `CFS_TEST_VERBOSE=1` を付けると、詳しいログを表示します。
+
+### 本物の S3 でのテスト
+
+本物の S3 のバケットを相手にテストすることもできます。テストは中身を頻繁に書き込み・削除するので、**ふだんの認証情報ではなく、テスト用のバケットだけを操作できる IAM ロール**で動かします。
+
+**準備（最初の 1 回だけ）**
+
+1. テスト用のバケットを作ります
+
+   ```
+   cfs -c s3://<テスト用バケット> cabinet init
+   ```
+
+2. テスト用のバケットだけを操作できる IAM ロールを作ります。権限は `cfs -c s3://<テスト用バケット> cabinet policy gc` の出力を、ロールのインラインポリシーにします。信頼ポリシーは、自分の IAM ユーザー（またはロール）からの `sts:AssumeRole` だけを許可します
+3. `~/.aws/config` に、そのロールに切り替えるプロファイルを足します
+
+   ```
+   [profile cfs-autotest]
+   role_arn = arn:aws:iam::<アカウント>:role/cfs-autotest
+   source_profile = default
+   region = <リージョン>
+   ```
+
+4. リポジトリの直下に `.cfs-test.env` を作ります（`.gitignore` 済みなので、リポジトリには入りません）
+
+   ```
+   CFS_TEST_STORAGE=s3
+   CFS_TEST_S3_BUCKET=<テスト用バケット>
+   AWS_REGION=<リージョン>
+   AWS_PROFILE=cfs-autotest
+   ```
+
+**実行**
+
+```
+scripts/with-test-aws.sh go test -count=1 ./internal/cfs
+```
+
+`scripts/with-test-aws.sh` は、`.cfs-test.env` を読み、AWS CLI でロールの一時的な認証情報を取り出して、そのコマンドにだけ環境変数として渡します。`cfs` のコマンドも同じように実行できます（例: `scripts/with-test-aws.sh cfs -c s3://<テスト用バケット> tag ls`）。
+
+AWS CLI を経由しているのは、`aws login` でログインしたプロファイルを `source_profile` にしてロールを引き受けることに、Go の AWS SDK（aws-sdk-go-v2）がまだ対応していないためです（AWS CLI は対応しています）。
 
 ### コマンドの挙動を比べる
 
