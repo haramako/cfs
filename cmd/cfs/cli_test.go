@@ -467,3 +467,40 @@ func TestSplitCommand(t *testing.T) {
 		t.Errorf("unclosed quote must be an error")
 	}
 }
+
+func TestCLIUploadExclude(t *testing.T) {
+	c := newCLITest(t)
+	c.write(map[string]string{
+		"src/a.txt":          "a",
+		"src/a.meta":         "meta",
+		"src/keep.meta":      "keep",
+		"src/.DS_Store":      "ds",
+		"src/.hidden/x.txt":  "hidden",
+		"src/#autosave#":     "autosave",
+		"src/b.txt~":         "backup",
+		"src/build/out.bin":  "build",
+		"src/sub/build/x":    "nested build",
+		"src/sub/c.txt":      "c",
+		"src/sub/Temp/t.txt": "temp",
+	})
+	c.write(map[string]string{".cfsenv": `{"Cabinet": "cabinet", "Exclude": ["*.meta", "!keep.meta", "/build", "Temp/"]}`})
+	c.run("cabinet", "init")
+
+	// 末尾に区切りのあるフォルダでも、パスはフォルダからの相対パス
+	c.run("upload", "-t", "v1", "src/")
+	if got := lsPaths(c.run("ls", "v1")); got != "a.txt,keep.meta,sub/build/x,sub/c.txt" {
+		t.Errorf("ls v1 = %s", got)
+	}
+
+	// ファイルを直接指定したときは、パターンによらず加える
+	c.run("upload", "-t", "v2", "src/a.meta")
+	if got := lsPaths(c.run("ls", "v2")); got != "src/a.meta" {
+		t.Errorf("ls v2 = %s", got)
+	}
+
+	// 誤ったパターンはエラー
+	c.write(map[string]string{".cfsenv": `{"Cabinet": "cabinet", "Exclude": ["[bad"]}`})
+	if _, err := c.tryRun("upload", "-t", "v3", "src"); err == nil || !strings.Contains(err.Error(), "invalid exclude pattern") {
+		t.Errorf("invalid pattern must be an error, but %v", err)
+	}
+}

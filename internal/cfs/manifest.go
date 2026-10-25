@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// ExcludePatterns は除外するファイルのパターンを表す
-var ExcludePatterns = []string{".*", "*.vdat", "cfs", "*.meta", "*.tmx"}
-
 // マニフェストの形式（形式 v2）
 //
 //	#cfs-manifest 2

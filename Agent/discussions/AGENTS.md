@@ -15,6 +15,7 @@
 
 ## Log
 
+- 2026-10-25 [アップロードの対象から外すファイルを設定できるようにする](2026-10-25-upload-exclude-patterns.md) — **決定**: いつも外すのは `.*` `#*` `*~` だけ、それ以外は `.cfsenv` の `Exclude` に `.gitignore` と似たパターンで書く。`!` で戻せる、フォルダは中身ごと外す、ファイルの直接指定には当てない
 - 2026-10-25 [0 バイトのデータもキャビネットに置く](2026-10-25-upload-zero-byte-data.md) — 特別扱いは昔の S3 ライブラリが 0 バイトで失敗したため。aws-sdk-go-v2 では問題ないことを実 S3 で確認。**決定**: 置く、GC と `ls --verify` でも普通に扱う、取得の近道（空の SHA-256 なら取りに行かない）は残す
 - 2026-10-25 [リファクタリング（設定を引数で渡す・CLI のエラー処理・ダウンロードの整理）](2026-10-25-refactoring-config-and-errors.md) — 設定は `cfs.Config` を引数で渡す（グローバル変数をやめた）。`~/.cfs_setting` をやめ、キャッシュは `os.UserCacheDir()/cfs`（`CFS_CACHE_DIR`）。CLI はエラーを返し、終了コード 1。`Sync` の並列化、`--filter-cmd` の引用符、キャッシュ名は SHA-256
 - 2026-10-25 [キャビネットを作るコマンド（cfs cabinet init）の計画](2026-10-25-cabinet-init-plan.md) — S3 のバケット作成（非公開・ACL 無効・バージョニングなし）とローカルのフォルダ作成、`config.json` に形式の版を入れる。追記: 未決事項はすべて了承され、`cabinet init` と `cabinet policy` を実装した

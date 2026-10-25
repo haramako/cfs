@@ -14,6 +14,10 @@ type Config struct {
 	Flatten   bool // パスをファイル名だけにする
 	Compress  bool // 圧縮する
 
+	// アップロードの対象から外すファイルのパターン（.gitignore と似た書き方。exclude.go を参照）。
+	// DefaultExcludes（".*"、"#*"、"*~"）の後に続けて使う
+	Exclude []string
+
 	// 暗号化の鍵（任意の長さの文字列。16 文字以上）。環境変数 CFS_ENCRYPT_KEY が優先
 	EncryptKey string
 	// 鍵を入れ替えた後も、古い鍵で暗号化したデータを読むための鍵。環境変数 CFS_OLD_ENCRYPT_KEYS（カンマ区切り）が優先

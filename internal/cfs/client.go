@@ -2,9 +2,9 @@ package cfs
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +26,7 @@ type Client struct {
 	queue     chan uploadRequest
 	queued    map[string]bool // 今回のアップロードで既に送ったデータ（同じ中身を2回送らない）
 	cfg       *Config
+	excluder  *Excluder
 	keys      *KeyRing
 	signer    *SigningKey
 	log       Logger
@@ -42,6 +43,9 @@ func (c *Client) Init() error {
 	c.log = c.cfg.Logger()
 
 	var err error
+	if c.excluder, err = NewExcluder(c.cfg.Exclude); err != nil {
+		return err
+	}
 	if c.keys, err = c.cfg.KeyRing(); err != nil {
 		return err
 	}
@@ -121,52 +125,53 @@ func (m *Manifest) ValidateCache(s Storage) (bool, error) {
 	return s.Exists(manifestKey(m.Hash))
 }
 
+// AddFiles は、root のフォルダの中のファイルを加える。パスは root からの相対パスになる。
+// 対象から外すパターン（DefaultExcludes と Config.Exclude）に合うものは加えない（フォルダなら中身ごと）。
+// root にファイルを直接指定したときは、パターンによらず、そのパスで加える
 func (c *Client) AddFiles(root string) error {
-	return filepath.Walk(root, func(path2 string, info os.FileInfo, err error) error {
-		// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
-		path2 = norm.NFC.String(path2)
+	info, err := os.Stat(root)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		_, err := c.AddFile("", norm.NFC.String(root), info)
+		return err
+	}
 
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info == nil {
-			c.log.Printf("%s not found\n", path2)
+		if p == root {
 			return nil
 		}
-
-		// TODO: filepath.Matchがちゃんと働かないため、とりあえず対応
-		ext := filepath.Ext(path2)
-		base := filepath.Base(path2)
-		if strings.HasPrefix(base, ".") || strings.HasPrefix(base, "#") ||
-			strings.HasSuffix(base, "~") ||
-			ext == ".meta" || ext == ".manifest" || ext == ".tmx" {
-			return nil
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
 		}
+		// OSXのためにUTF-8文字列を正規化する See: https://text.baldanders.info/golang/unicode-normalization/
+		rel = norm.NFC.String(filepath.ToSlash(rel))
 
-		if path2 != "." {
-			for _, pat := range ExcludePatterns {
-				if match, err := filepath.Match(pat, path2); match || err != nil {
-					if info.Mode().IsDir() {
-						return filepath.SkipDir
-					} else {
-						return nil
-					}
-				}
-			}
-		}
-
-		if !info.Mode().IsDir() {
-			if root == "." || root == path2 {
-				c.AddFile("", path2, info)
-			} else {
-				c.AddFile(root, path2[len(root)+1:], info)
-			}
-		} else {
-			if !c.cfg.Recursive && root != path2 {
+		if c.excluder.Excluded(rel, d.IsDir()) {
+			c.log.Printf("excluded %s\n", rel)
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
 		}
-		return nil
+		if d.IsDir() {
+			if !c.cfg.Recursive {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		_, err = c.AddFile(root, rel, info)
+		return err
 	})
 }
 

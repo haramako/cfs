@@ -40,7 +40,7 @@ CFS (Content base File System) は、ゲームアセットのような大量フ�
 ## アップロードの流れ（`cfs upload`）
 
 1. `.cfsenv` を読み、ローカルのマニフェストのキャッシュ（前回アップロード時のマニフェスト）を 手元のキャッシュの `manifest/<sha256>` からロード。`.hash` のハッシュで `manifest/` にまだあるかを 1 回確かめ（`ValidateCache`）、なければキャッシュを捨てる
-2. `Client.AddFiles` で対象ディレクトリを走査（除外ルールは [known-issues-and-gotchas.md](known-issues-and-gotchas.md) 参照）
+2. `Client.AddFiles` で対象ディレクトリを走査（除外ルールは `exclude.go`。[known-issues-and-gotchas.md](known-issues-and-gotchas.md) 参照）
 3. `Client.AddFile` で変更検出
    - 前回の `Time + 1秒` 以前の mtime かつサイズ一致 → 読まずにスキップ
    - 読み込んで SHA-256（`OrigHash`）が一致 → 時刻だけ更新
