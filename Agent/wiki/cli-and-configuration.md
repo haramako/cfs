@@ -4,7 +4,7 @@
 
 ## コマンドの定義場所
 
-- `cmd/cfs/main.go` の `app.Commands` が一覧。`upload` / `sync` / `merge` / `cat` / `ls` / `config` は `main.go`、`serve` は `cmd_serve.go`、`pack` 系は `cmd_pack*.go` / `cmd_unpack.go` / `cmd_patch.go`、`gc` / `tag` / `cabinet`（`init` / `policy` / `config`）/ `keygen` は `cmd_cabinet.go`
+- `cmd/cfs/main.go` の `app.Commands` が一覧。`upload` / `sync` / `merge` / `cat` / `ls` / `config` は `main.go`、`serve` は `cmd_serve.go`、`console` は `cmd_console.go`、`pack` 系は `cmd_pack*.go` / `cmd_unpack.go` / `cmd_patch.go`、`gc` / `tag` / `cabinet`（`init` / `policy` / `config`）/ `keygen` は `cmd_cabinet.go`
 - CLI は urfave/cli v3。コマンドのフラグは引数の後ろにも書ける（`cfs upload src -t v1`）。グローバルオプションもサブコマンドの後ろに書ける（`cfs upload -V src`）。サブコマンドの入れ子（`tag ls`、`cabinet config set`）は `Commands` で書く
 - アプリの組み立ては `newApp()`（テストからプロセス内で動かすため `main` と分けた）
 - 設定を使うコマンドは、先頭で `loadConfig(c)` を呼んで `*cfs.Config` を作る: `cfs.LoadConfig`（既定値 → `.cfsenv` → 環境変数）→ `-V` → `--cabinet` / `--url`（今いるフォルダ基準で `ResolveLocation`）。`--force` は `upload` が直接見る。`pack` / `unpack` / `patch` は設定を使わない
@@ -40,6 +40,13 @@
 - ディレクトリ一覧は `html/template` で書く（ファイル名をエスケープ）。`.htm` の Shift_JIS 特別扱いはやめた
 - エラーは panic せず 404 / 500。アクセスログは `log.Printf`（`X-Forwarded-Email` があれば出す）
 - `http.Server` のタイムアウト: `ReadHeaderTimeout` 10 秒、`ReadTimeout` 30 秒、`IdleTimeout` 2 分（大きいファイルのために `WriteTimeout` は付けていない）
+
+## `console`（`cmd/cfs/cmd_console.go`。2026-10-25 に追加）
+
+- 手元向けの読み取り専用の管理画面。タグの一覧（`cfs.ListTags` + マニフェストを 8 並列で読んでファイル数・大きさ・`Manifest.SignedBy`）と、マニフェストのファイル一覧。ファイルの中身は `serve` の `server` を `/files/` に `StripPrefix` して返す（`newServer(d, 0)` でタグは毎回読み直す。マニフェストは LRU）
+- 復号した中身を見せるので、`checkLoopback` でループバック以外の待ち受けを断り、`isLocalHost` で `Host` が localhost / ループバックの IP 以外のリクエストを 403 にする（DNS リバインディング対策）。`X-Frame-Options: DENY`、`nosniff`、`Cache-Control: no-store`
+- テンプレートは `html/template`。`+` は `&#43;` にエスケープされるので、属性はバッジを分けて出す（`zlib` / `enc` / `raw`）。一覧の絞り込みは小さなインラインの JavaScript
+- 読めないマニフェストのタグは、一覧のその行にエラーを出す（ページ全体は失敗させない）
 
 ## `--filter-cmd`（`cmd/cfs/filter.go`）
 

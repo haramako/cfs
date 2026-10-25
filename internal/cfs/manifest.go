@@ -28,6 +28,7 @@ type Manifest struct {
 	Hash        string
 	Contents    map[string]Content
 	UploadCount int
+	SignedBy    string // 署名した鍵の ID（読み込んだマニフェストに署名があれば。署名を確かめたとは限らない）
 }
 
 // ContentAttribute はコンテンツの圧縮や暗号の状態を表すenum
@@ -103,6 +104,7 @@ func (m *Manifest) Parse(data []byte, verifier *Verifier) error {
 			return fmt.Errorf("invalid manifest signature line")
 		}
 		keyID, signature = fields[0], fields[1]
+		m.SignedBy = keyID
 	}
 
 	if verifier.Enabled() {

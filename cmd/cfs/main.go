@@ -72,6 +72,7 @@ func newApp() *cli.Command {
 		lsCommand,
 		configCommand,
 		serveCommand,
+		consoleCommand,
 		packCommand,
 		unpackCommand,
 		packManifestCommand,
