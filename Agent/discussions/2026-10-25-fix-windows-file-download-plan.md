@@ -63,3 +63,29 @@ Windows で、`Url` を指定しない `file://` のキャビネット（例: `f
 
 - `docs/configuration.md` と `docs/storage-backends.md` の `Cabinet` の説明に、普通のパスで書けることと相対パスの基準を書く
 - ルートの `README.md` の「はじめかた」は、ローカルで試す例を `"Cabinet": "./cabinet"` のような書き方にできる
+
+## 追記（2026-10-25）: Windows の紛らわしいパスの扱い
+
+### 確認したこと（Go 1.27 / Windows で実測）
+
+| パス | `filepath.IsAbs` | `filepath.Abs` の結果 | `filepath.Join(D:\proj, パス)` |
+|---|---|---|---|
+| `/hoge`、`\hoge` | false | `C:\hoge`（今のドライブのルート） | `D:\proj\hoge`（意図と違う） |
+| `C:hoge` | false | C ドライブの「今のフォルダ」+ `hoge` | `D:\proj\C:hoge`（壊れる） |
+| `C:\hoge` | true | `C:\hoge` | `D:\proj\C:\hoge`（壊れる。絶対パスは Join してはいけない） |
+
+- Windows の `\hoge` / `/hoge` は「今のドライブのルート + hoge」。Go の `filepath.IsAbs` はこれを絶対パスと見なさない
+- `C:hoge` は MS-DOS 由来の「ドライブごとの今のフォルダ」からの相対パス。今の Windows では `=C:` のような見えない環境変数で再現されている
+
+### 決定事項（オーナー指示）
+
+- **`C:hoge` の形（ドライブ名の直後に区切り文字がないパス）はエラーにする。** ドライブごとの今のフォルダに左右されて分かりにくく、事故の元になるため。エラーメッセージで `C:\hoge` か相対パスで書くよう案内する
+
+### 実装時の注意
+
+- 相対パスを基準のフォルダとつなぐ前に、次の順で判定する
+  1. `C:hoge` の形 → エラー
+  2. 絶対パス（`C:\hoge`、`\\server\share\x`） → そのまま使う
+  3. `\` や `/` で始まるパス（Windows のみ） → 基準のフォルダのドライブ名（`filepath.VolumeName`）を付ける。`.cfsenv` 基準なら `.cfsenv` のあるドライブ、コマンドライン基準なら今のドライブ
+  4. それ以外 → 基準のフォルダとつなぐ
+- テストに、上の各パターン（Windows だけで意味のあるものは windows CI で）を入れる
